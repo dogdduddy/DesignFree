@@ -1,0 +1,55 @@
+services:
+  editor:
+    build: .
+    ports:
+      - "${DRAFTROOM_BIND_ADDRESS:-127.0.0.1}:${DRAFTROOM_PORT:-4173}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      ASSET_ROOT: /app/asset-data
+      DRAFTROOM_SECURE_COOKIE: ${DRAFTROOM_SECURE_COOKIE:-false}
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: draftroom
+      PGUSER: draftroom
+      PGPASSWORD: ${DRAFTROOM_DB_PASSWORD:?Run npm run setup to generate a private .env}
+    volumes:
+      - asset-data:/app/asset-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+  postgres:
+    image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    environment:
+      POSTGRES_DB: draftroom
+      POSTGRES_USER: draftroom
+      POSTGRES_PASSWORD: ${DRAFTROOM_DB_PASSWORD:?Run npm run setup to generate a private .env}
+    volumes:
+      - document-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U draftroom -d draftroom"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+volumes:
+  document-data:
+  asset-data:

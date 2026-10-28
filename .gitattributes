@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.ttf binary
+# Keep the vendored upstream license byte-for-byte, including its whitespace.
+public/fonts/OFL.txt -whitespace

@@ -1,0 +1,44 @@
+{
+  "name": "designfree",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "api": "tsx server/index.ts",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test:privacy": "node scripts/check-publication.mjs",
+    "test:browser": "node tests/editor.e2e.mjs",
+    "start:docker": "docker compose -p designfree up --build -d",
+    "stop:docker": "docker compose -p designfree down",
+    "logs:docker": "docker compose -p designfree logs --tail=100"
+  },
+  "dependencies": {
+    "canvaskit-wasm": "0.42.0",
+    "lucide-react": "1.61.0",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=26 <27",
+    "npm": ">=11"
+  }
+}

@@ -1,0 +1,12 @@
+FROM node:26.0.0-alpine@sha256:30f5a66e7265ef70aac56b4753ffa7905e54eca1084bc25503893ad8e9273f05
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY src ./src
+COPY server ./server
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
+ENV HOST=0.0.0.0 PORT=3000 NODE_ENV=production
+RUN mkdir -p /app/asset-data && chown node:node /app/asset-data
+USER node
+EXPOSE 3000
+CMD ["npm", "run", "api"]
