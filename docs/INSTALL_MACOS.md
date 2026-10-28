@@ -79,7 +79,19 @@ DESIGNFREE_STOP
 
 ## 6. Codex로 개발하기
 
-Codex 앱/CLI는 해당 Mac에서 별도로 설치하고 로그인하세요. Codex에서 `~/Projects/DesignFree` 폴더를 열고 다음을 요청하면 됩니다.
+Codex가 아예 없다면, 아래 블록으로 **Codex CLI 설치와 실행**까지 할 수 있습니다. 이미 앱을 사용한다면 이 블록은 생략하고 앱에서 설치 폴더를 열어도 됩니다.
+
+```sh
+cd "$HOME/Projects/DesignFree"
+. "${NVM_DIR:-$HOME/.nvm}/nvm.sh" --no-use
+nvm use
+npm install -g @openai/codex
+codex
+```
+
+처음 실행하면 본인 계정으로 로그인하고 저장소 신뢰/권한 안내를 직접 확인하세요. 다른 사람의 로그인 정보는 복사하지 않습니다. nvm의 사용자 디렉터리에 설치하므로 이 npm 명령에 sudo를 붙이지 마세요. [공식 Codex CLI 안내](https://learn.chatgpt.com/docs/codex/cli)를 참고할 수 있습니다.
+
+Codex에서 `~/Projects/DesignFree` 폴더를 열고 다음을 요청하면 됩니다.
 
 > AGENTS.md와 docs/CODEX_HANDOFF.md를 읽고 환경을 확인해 줘. 요청하지 않은 자동 진행이나 공개 업로드는 하지 마.
 
