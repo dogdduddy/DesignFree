@@ -2,7 +2,29 @@
 
 Figma-style open-source design editor for personal Docker hosting. The UI currently uses the Draftroom name. React/TypeScript with SVG and CanvasKit rendering, absolute/Flex/Grid layout subsets, component instances/variants and shared styles/tokens/themes. MIT licensed; no Figma code or assets are included.
 
-## Run on another machine
+## 처음 설치하는 분: Mac 복사·붙여넣기
+
+Homebrew·Git·Node·Docker가 없어도 아래 명령으로 시작할 수 있습니다. **Mac에서 ⌘ + Space → `터미널` 검색 → 실행**한 뒤 전체 블록을 한 번에 붙여넣으세요. 이 명령은 필요한 도구를 설치하고 셸 환경을 설정하며 공개 저장소를 복제해 앱을 실행합니다.
+
+```sh
+/bin/bash <<'DESIGNFREE_INSTALL'
+set -e
+installer_file="$(mktemp -t designfree-install)"
+trap 'rm -f "$installer_file"' EXIT
+curl --fail --show-error --silent --location --retry 3 \
+  https://raw.githubusercontent.com/dogdduddy/DesignFree/main/scripts/bootstrap-macos.sh \
+  -o "$installer_file"
+/bin/bash "$installer_file" </dev/tty
+DESIGNFREE_INSTALL
+```
+
+설치 중 **Mac 로그인 암호·Return 입력, Apple 개발 도구 설치창, Docker 최초 약관/권한 화면**은 직접 처리해야 합니다. 암호는 입력해도 화면에 표시되지 않는 것이 정상입니다. 약관은 직접 읽고 동의하는 경우에만 진행하세요. 스크립트가 설치 완료를 기다린 후 다음 단계로 이어갑니다.
+
+기본 설치 위치는 `~/Projects/DesignFree`입니다. 완료되면 **http://127.0.0.1:4173/** 에서 새 소유자 계정을 만드세요. 기존 폴더·작업·비밀번호는 덮어쓰지 않습니다. 처음부터 Docker/개발 도구를 설치하므로 시간이 걸릴 수 있습니다.
+
+**[처음부터 따라 하는 Mac 설치 안내](docs/INSTALL_MACOS.md)** 에 다시 실행·중지·문제 해결·Codex 사용 방법을 정리했습니다. Windows/Linux용 자동 설치는 아직 제공하지 않습니다.
+
+## 도구가 이미 설치된 환경에서 실행
 
 Install Docker with Compose v2 and Node.js **26** (tested version pinned in `.nvmrc` and `.node-version`). This GitHub repository is public; cloning does not require copying any GitHub credentials.
 
