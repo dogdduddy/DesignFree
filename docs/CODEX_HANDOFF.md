@@ -8,13 +8,13 @@ Implemented: selection/marquee, snapping/guides, clipboard/grouping/parenting, a
 
 Vite defaults to IndexedDB; Docker uses server mode with a single owner/shared library. Modes are separate and require manual JSON transfer. Server saves use expected version and immutable operation ID, ACK only after PostgreSQL COMMIT, and an IndexedDB durable outbox with explicit uncertainty/conflict recovery. Image bytes use a separate volume. Read FEATURES.md for retry and restore semantics.
 
-SVG remains default. CanvasKit uses browser-shaped text tiles. Performance/parity claims need freshly generated fingerprinted fixtures. Physical Korean IME, all OS/browsers, arbitrary rich text/bidi and GPU memory are not certified. Flex/Grid meaning is authored separately from computed geometry. Fixed HTML/CSS export is not a general responsive component generator.
+SVG remains default. CanvasKit uses browser-shaped text tiles. Performance/parity claims need freshly generated fingerprinted fixtures. Physical Korean IME, all OS/browsers, arbitrary rich text/bidi and GPU memory are not certified. Flex/Grid meaning is authored separately from computed geometry. HTML/CSS exports a responsive Flex/Grid subset with named intrinsic fallbacks; see FEATURES.md.
 
 ## Remaining work to assess, not automatic authorization
 
 - Physical IME, native x86 hardware and Linux/Windows desktop validation (AMD64 Docker emulation smoke/storage passed; see TESTING.md); large-document/component/style-library performance.
 - Numeric/spacing tokens, cross-document libraries and wider paint/effect support. Visual variant/style/token/theme editors are implemented; see FEATURES.md for their scoped behavior.
-- Responsive CSS/theme/component-aware exports and remaining layout semantics.
+- Theme/component-aware exports, wider responsive intrinsic sizing and remaining layout semantics.
 - Collaboration/permissions/prototyping and broader SVG/Figma import.
 - TLS/remote deployment hardening and further server resource limits when requested.
 

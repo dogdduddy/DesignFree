@@ -122,7 +122,9 @@ try {
       await button("선택 frame 웹 미리보기").click();
       await page.getByRole("dialog").waitFor();
       assert.ok(
-        (await page.getByRole("dialog").innerText()).includes("고정 크기"),
+        (await page.getByRole("dialog").innerText()).includes(
+          "반응형 Flex/Grid",
+        ),
       );
       assert.ok(
         (await page.getByRole("dialog").innerText()).includes("stroke"),
@@ -219,6 +221,23 @@ try {
         1,
       );
       assert.deepEqual(requests, []);
+      for (const width of [320, 480, 768, 1100]) {
+        await standalone.setViewportSize({ width, height: 900 });
+        const geometry = await standalone
+          .locator('[data-node-id="frame"]')
+          .evaluate((el) => ({
+            width: el.getBoundingClientRect().width,
+            display: getComputedStyle(el).display,
+          }));
+        assert.equal(geometry.width, width);
+        assert.equal(geometry.display, "grid");
+        assert.equal(
+          await standalone
+            .locator('[data-node-id="nested"]')
+            .evaluate((el) => el.getBoundingClientRect().width),
+          100,
+        );
+      }
       await standalone.close();
     },
   );

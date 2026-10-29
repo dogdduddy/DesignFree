@@ -1,6 +1,7 @@
 import fontLicense from "../public/fonts/OFL.txt?raw";
 import { validateDocument, type SceneDocument } from "./core";
 import { computeLayout } from "./flex-layout";
+import { webLayout } from "./web-layout";
 import { nodeFills } from "./paints";
 import { cssFont, missingFont, textLayout } from "./text-layout";
 
@@ -25,7 +26,7 @@ export type WebExport = {
   width: number;
   height: number;
 };
-/** Fixed geometry snapshot. Never changes authored layout or executes imported markup. */
+/** Semantic layout where supported; never changes authoring or executes imported markup. */
 export function exportFrameWeb(
   source: SceneDocument,
   frameId: string,
@@ -45,8 +46,21 @@ export function exportFrameWeb(
   const doc = computeLayout(source),
     frame = doc.nodes[frameId];
   const warnings = new Set<string>([
-    "고정 크기 스냅샷: Flex/Grid·hug/fill·min/max는 계산된 좌표로 내보냅니다. 반응형 규칙은 포함하지 않습니다.",
+    "반응형 Flex/Grid: 지원 frame은 viewport 폭을 사용합니다. absolute 요소는 고정 좌표를 유지합니다. 경고된 intrinsic 규칙은 고정 스냅샷입니다.",
   ]);
+  // Analyze only the visible exported subtree; unrelated pages must not add warnings.
+  const nodes: SceneDocument["nodes"] = {};
+  const collect = (id: string) => {
+    const node = doc.nodes[id];
+    if (!node.visible) return;
+    nodes[id] = {
+      ...node,
+      children: node.children.filter((child) => doc.nodes[child].visible),
+    };
+    node.children.forEach(collect);
+  };
+  collect(frameId);
+  const layout = webLayout({ ...doc, nodes }, warnings);
   const rules = [
     ...(fontDataUrl ? [`/* ${fontLicense.replaceAll("*/", "* / ")} */`] : []),
     "html,body{margin:0;padding:0} .dr-node{position:absolute;left:0;top:0;box-sizing:border-box;transform-origin:0 0} .dr-line{position:absolute;white-space:pre;line-height:1}",
@@ -71,10 +85,15 @@ export function exportFrameWeb(
       );
     if (root) style.push("position:relative");
     else style.push(`transform:matrix(${node.transform.join(",")})`);
+    style.push(...layout.styles(node, root));
+    if (node.layout.width === "hug" || node.layout.height === "hug")
+      warnings.add(
+        `${node.name}: hug 크기는 내보내기 시점의 계산값으로 고정합니다.`,
+      );
     if (node.clipContent) style.push("overflow:hidden");
     if (node.type !== "group" || node.clipContent)
       style.push(
-        `border-radius:${node.type === "ellipse" ? "50%" : px(Math.min(node.radius, node.width / 2, node.height / 2))}`,
+        `border-radius:${node.type === "ellipse" ? "50%" : px(node.radius)}`,
       );
     const fills =
       node.type === "group"
@@ -112,7 +131,7 @@ export function exportFrameWeb(
         })
         .join("");
       warnings.add(
-        "텍스트는 계산된 줄바꿈을 보존합니다. DOM 폰트 baseline·glyph raster의 editor pixel 동등성은 보장하지 않습니다.",
+        "텍스트는 계산된 줄바꿈·줄 위치를 고정합니다. 폭 변경에 따른 재줄바꿈과 DOM 폰트 baseline·glyph raster의 editor pixel 동등성은 지원하지 않습니다.",
       );
     } else if (solids.length) {
       style.push(

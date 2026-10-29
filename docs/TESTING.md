@@ -170,3 +170,26 @@ this does not certify loading the shell with the whole network disconnected.
 Unit tests inject durable-write failure and cross-writer compare-and-swap races.
 Other browser engines, disk eviction, physical power loss and large-library
 performance need separate verification.
+
+## Responsive HTML/CSS export (W01)
+
+With Vite on loopback, run `EDITOR_URL=http://127.0.0.1:5173/ node tests/responsive-web-export.e2e.mjs`.
+It exports each scene once, resizes the standalone browser page to 320/480/768/1100px,
+and compares every visible box to a separately resized source passed to `computeLayout`
+(tolerance 0.1 CSS px). It also checks fixed fallback geometry and explicit warnings.
+Fixtures cover Flex direction/justification/wrap/overflow, fill/min/max/padding, Grid
+px/auto/fr tracks, areas/spans/implicit placement, fractional sums below one,
+clamped fills, nested layouts and root constraints. Artifacts stay in ignored
+`test-results/w01-responsive-web.json`. This is Chromium fixture coverage, not full
+CSS conformance, text reflow or cross-browser pixel certification.
+
+Run `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/web-export.e2e.mjs` for actual
+selection/preview/download, sandbox/CSP, affine/PNG/font and source/history checks.
+Run `node tests/web-export-server.mjs` for the same UI suite plus auth and storage
+regressions against production Docker. The runner owns only `designfree-test-w01`
+on `127.0.0.1:43187`, refuses existing project resources and occupied ports, pins
+`compose.yaml`, ignores `.env`/implicit overrides and generates database/owner
+credentials in process environment only. It removes only this project's containers,
+network and volumes in `finally`; images/build cache remain. Existing browser tabs
+and personal installations are not used. The source-import geometry suite requires
+Vite; production coverage separately exercises the downloaded HTML at the same widths.
