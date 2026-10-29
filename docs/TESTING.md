@@ -21,3 +21,29 @@ node tests/server-storage.e2e.mjs
 ```
 
 Clean up only that named disposable project. Unit tests do not prove browser pixels or database durability. Renderer gates need freshly regenerated matching source fingerprints. Historical performance prose is not portable benchmark evidence. Record actual environments/results without private runtime artifacts.
+
+## Everyday screen acceptance (A01)
+
+With Vite running, use `DRAFTROOM_URL=http://127.0.0.1:5173/ npm run test:daily-screens`.
+Run it twice to check repeatability; set `A01_RUN=1` / `A01_RUN=2` to retain separate reports.
+Each invocation owns a fresh Chromium context and IndexedDB library.
+`npm run test:daily-screens:server` builds the production bundle in a fresh
+`designfree-test-a01` Compose project on loopback port 43171, runs the same suite twice
+against the retained disposable server library, and removes only that project's containers,
+network and volumes in `finally`. It refuses existing containers/volumes with that project
+label or an occupied port. It pins `compose.yaml`, ignores `.env`/Compose overrides, and
+generates test owner/database credentials in process environment only. Docker must be running.
+Set `A01_REGRESSIONS=1` to also run auth and server-storage regression suites before cleanup.
+No personal installation or open browser tabs are used. If interrupted by an uncatchable kill,
+inspect and clean up only `designfree-test-a01` before retrying; the runner refuses leftovers.
+
+`tests/daily-screens.e2e.mjs` creates a blank document and authors Login, List and Settings
+pages using drawing tools, inspector inputs and native layer-panel drags. No scene import,
+application state setter or source-module fixture is used. It checks text and frame ownership,
+edit/Undo/Redo, durable revision increments, no-op/cancel without writes or history,
+SVG and PNG downloads, sandbox preview and standalone HTML/CSS, document duplication,
+copy isolation, reload and original page reopening. Server setup/login uses the real browser
+form. JSON downloads and storage reads observe results only. Each mode reports 11 checkpoints;
+artifacts are under ignored `test-results/a01-*`. This covers the absolute-layout workflow in
+bundled Chromium; responsive export, Flex/Grid authoring, physical IME and other browsers/OS
+need their own acceptance scenarios.

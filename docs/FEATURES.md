@@ -405,3 +405,14 @@ Color styles replace the fill stack with one opaque solid paint; hex alpha remai
 Duplicate retains document-local references. Clipboard emits detached current-theme snapshots, as for components. SVG/PNG and fixed HTML/CSS export show resolved styles; CSS custom properties, responsive theme export, gradient/multi-paint shared color styles, numeric/spacing tokens, per-field typography token expressions, inset/spread/layer blur, cross-document libraries and per-node themes are outside this initial subset. Existing documents require no migration; older apps are not certified to preserve this additive metadata. Large-library performance, other browsers/OS, amd64 and physical IME remain unverified.
 
 Validation: `npm test`, `npm run build`, `node tests/styles.e2e.mjs`, `node tests/style-renderers.e2e.mjs`. Use `STYLE_SERVER=1`, disposable owner credentials and `DRAFTROOM_URL` for authenticated persistence tests; `STYLE_REPORT`, `STYLE_SCREENSHOT` and `STYLE_PIXEL_REPORT` select artifacts.
+
+## Everyday screen acceptance (A01)
+
+A browser acceptance scenario now builds a login form, task list and settings screen from
+an empty document through drawing, inspector editing and layer parenting. It covers edits,
+Undo/Redo, duplication, SVG/PNG and frame HTML/CSS downloads, reload and library reopening
+in IndexedDB and disposable authenticated server modes. See [testing](TESTING.md).
+Canceling a drawing gesture restores the previous scene **and selection** without creating
+history or an autosave; Escape with no active gesture still clears selection. Export remains
+a static design snapshot, and creating inside a frame currently requires explicit parenting
+via a layer-panel drop. The scenario exercises absolute layout, not a responsive application.

@@ -14,7 +14,9 @@
     "test:browser": "node tests/editor.e2e.mjs",
     "start:docker": "docker compose -p designfree up --build -d",
     "stop:docker": "docker compose -p designfree down",
-    "logs:docker": "docker compose -p designfree logs --tail=100"
+    "logs:docker": "docker compose -p designfree logs --tail=100",
+    "test:daily-screens": "node tests/daily-screens.e2e.mjs",
+    "test:daily-screens:server": "node tests/daily-screens-server.mjs"
   },
   "dependencies": {
     "canvaskit-wasm": "0.42.0",

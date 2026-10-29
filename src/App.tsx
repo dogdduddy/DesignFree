@@ -736,9 +736,9 @@ export default function App() {
           setSelected([id]);
           return;
         }
-        const activeDrag = ["drag", "marquee"].includes(gesture.current?.mode);
+        const activeGesture = !!gesture.current;
         cancel();
-        if (!activeDrag) setSelected([]);
+        if (!activeGesture) setSelected([]);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         remove();
@@ -860,6 +860,7 @@ export default function App() {
       return;
     }
     if (tool !== "select") {
+      const originalSelection = [...selectedRef.current];
       const d = structuredClone(docRef.current);
       const node = createNode(tool, w);
       d.nodes[node.id] = node;
@@ -868,7 +869,13 @@ export default function App() {
       preview(d);
       sync();
       setSelected([node.id]);
-      gesture.current = { mode: "create", id: node.id, p: w, base: d };
+      gesture.current = {
+        mode: "create",
+        id: node.id,
+        p: w,
+        base: d,
+        originalSelection,
+      };
       return;
     }
     const rawHit = hitTest(geometryRef.current, w);
