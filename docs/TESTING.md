@@ -47,3 +47,42 @@ form. JSON downloads and storage reads observe results only. Each mode reports 1
 artifacts are under ignored `test-results/a01-*`. This covers the absolute-layout workflow in
 bundled Chromium; responsive export, Flex/Grid authoring, physical IME and other browsers/OS
 need their own acceptance scenarios.
+
+## AMD64 Docker emulation (P01)
+
+Run `node tests/amd64-server.mjs` with Docker Engine 29+ (platform-specific image
+inspection), Compose v2, dependencies and bundled Chromium installed. The runner owns
+`designfree-test-p01` on `127.0.0.1:43172`. It refuses existing project resources,
+including exact-name volumes/network without matching labels, and an occupied port.
+It explicitly selects `compose.yaml`, ignores `.env` and implicit Compose overrides,
+generates owner/database credentials only in process environment, and forces
+`linux/amd64` on editor, API and PostgreSQL. No personal installation or browser tab
+is used. It removes only its containers/network/volumes in `finally`; images/build
+cache remain. After an uncatchable interruption, inspect only this project's leftovers
+before retrying.
+
+It builds editor/API, asserts image `linux/amd64` plus runtime `uname -m = x86_64`,
+runs auth (9 scenarios) and server-storage (10 scenarios) browser regressions, then
+renames a document through the UI and asserts exactly one version increment. It
+removes all three containers with volumes retained, starts them again, logs in from
+a fresh Chromium process and compares the full API library and downloaded document
+JSON with the acknowledged snapshot. Artifacts stay in ignored `test-results/p01-*`;
+no owner credentials, cookies or session state are written.
+
+Verified 2026-10-29: macOS 26.5.1 ARM64 host, Docker Engine 29.1.2,
+Compose 2.40.3-desktop.1, Linux aarch64 Docker VM, Node 26.0.0 / npm 11.12.1,
+host Chromium 156.0.8078.4. All three containers reported `x86_64` with AMD64
+image metadata. First-owner creation, auth/storage regressions, UI save and exact
+reload after recreation passed; disposable volumes/network were removed.
+
+| Service | Platform-qualified Docker image ID | Recorded RepoDigest |
+| --- | --- | --- |
+| editor (`linux/amd64`, runtime `x86_64`) | `sha256:59f49609ee3da93a3787cdaebea843b6beb53f13acb6e692c1c4b68347bba32b` | `designfree-test-p01-editor@sha256:4b52315dbb8d59e7a7b2efb6dd4f83ac3512947cf8069634c775a481409154f4` |
+| api (`linux/amd64`, runtime `x86_64`) | `sha256:ad67ccbac18c5ce1b2fe93f5d8f74f0cfc66c83bc62c02403bc384d7c5baf970` | `designfree-test-p01-api@sha256:c583b58eeb9737fce97906b5b798dd80b8f77c34a788ab55d3b21720342ecadd` |
+| postgres (`linux/amd64`, runtime `x86_64`) | `sha256:3cec7eb015ba8adb28139fa5c83b8489cdf0e666e53dfdf20f598ae0cc8739e3` | `postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3` |
+
+Values are locally recorded image IDs and repository digests. Editor/API images
+were built locally and were not published; PostgreSQL uses the pinned upstream image.
+The host browser ran on ARM64. Native x86 hardware, Windows/Linux desktop browsers,
+physical IME, power-loss durability, performance and comprehensive AMD64 feature
+coverage remain **unverified**. Emulation success is not native-machine certification.

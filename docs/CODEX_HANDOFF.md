@@ -12,7 +12,7 @@ SVG remains default. CanvasKit uses browser-shaped text tiles. Performance/parit
 
 ## Remaining work to assess, not automatic authorization
 
-- Physical IME and Linux/Windows/AMD64 validation; large-document/component/style-library performance.
+- Physical IME, native x86 hardware and Linux/Windows desktop validation (AMD64 Docker emulation smoke/storage passed; see TESTING.md); large-document/component/style-library performance.
 - Better variant/style editors, numeric/spacing tokens and wider paint/effect support.
 - Responsive CSS/theme/component-aware exports and remaining layout semantics.
 - Collaboration/permissions/prototyping and broader SVG/Figma import.
