@@ -1595,3 +1595,39 @@ svg {
   border-radius: 6px;
   font: 11px/1.5 monospace;
 }
+
+.variant-editor fieldset {
+  min-width: 0;
+  margin: 12px 0;
+  padding: 8px;
+  border: 1px solid #ddd6e8;
+}
+.variant-editor label {
+  display: block;
+  margin: 8px 0;
+  font-size: 11px;
+}
+.variant-editor input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px;
+}
+.variant-state {
+  border-top: 1px solid #ddd6e8;
+  padding: 8px 0;
+  margin-top: 10px;
+}
+.variant-editor button {
+  margin: 4px 3px 4px 0;
+  font-size: 11px;
+}
+.variant-editor [role="alert"] {
+  color: #a12c38;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.variant-actions {
+  margin-top: 12px;
+}

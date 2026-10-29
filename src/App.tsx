@@ -5,12 +5,12 @@ import {
   LayoutEditError,
 } from "./layout-editing";
 import { StyleInspector } from "./StyleInspector";
+import { VariantInspector } from "./VariantInspector";
 import { createVariant } from "./variants";
 import {
   makeComponent,
   variantMembers,
   switchVariant,
-  setVariantProperties,
   createInstance,
   detachInstance,
   resetInstanceOverrides,
@@ -2654,41 +2654,15 @@ export default function App() {
                       Variant 추가
                     </button>
                     {n.component.variant && (
-                      <label>
-                        Variant 속성 (JSON)
-                        <input
-                          aria-label="Variant 속성"
-                          key={
-                            n.id +
-                            JSON.stringify(n.component.variant.properties)
-                          }
-                          defaultValue={JSON.stringify(
-                            n.component.variant.properties,
-                          )}
-                          disabled={!editable}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") e.currentTarget.blur();
-                          }}
-                          onBlur={(e) => {
-                            try {
-                              execute(
-                                setVariantProperties(
-                                  doc,
-                                  n.id,
-                                  JSON.parse(e.target.value),
-                                ),
-                              );
-                            } catch (err) {
-                              tell((err as Error).message);
-                              e.target.value = JSON.stringify(
-                                n.component?.kind === "main"
-                                  ? n.component.variant?.properties
-                                  : {},
-                              );
-                            }
-                          }}
-                        />
-                      </label>
+                      <VariantInspector
+                        key={
+                          n.id + JSON.stringify(n.component.variant.properties)
+                        }
+                        document={doc}
+                        sourceId={n.id}
+                        disabled={!editable}
+                        onChange={execute}
+                      />
                     )}
                   </>
                 ) : n.component?.kind === "instance" ? (
@@ -2703,7 +2677,8 @@ export default function App() {
                     </p>
                     {variantMembers(doc, n.component.sourceId).length > 0 && (
                       <label>
-                        Variant
+                        Variant (공통 override 유지 · 없는 레이어는 복귀 시
+                        복원)
                         <select
                           aria-label="Variant 전환"
                           value={n.component.sourceId}

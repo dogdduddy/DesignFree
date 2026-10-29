@@ -10,6 +10,8 @@ import {
 } from "../src/core";
 import { newDocument } from "../src/documents";
 import {
+  variantMembers,
+  type Variant,
   makeComponent,
   createInstance,
   switchVariant,
@@ -17,7 +19,7 @@ import {
   resetInstanceOverrides,
   type Instance,
 } from "../src/components";
-import { createVariant } from "../src/variants";
+import { createVariant, editVariantSet } from "../src/variants";
 function fixture() {
   const doc = newDocument();
   doc.nodes.main = createNode("frame", doc.rootId, {
@@ -232,5 +234,154 @@ describe("variants", () => {
     expect(h.document.nodes[link(h, id).nodeMap.badge].width).toBe(99);
     h.execute(switchVariant(h.document, id, other));
     expect(h.document.nodes[link(h, id).nodeMap[badge]].width).toBe(222);
+  });
+});
+
+describe("visual variant set transactions", () => {
+  const rowsOf = (d: import("../src/core").SceneDocument, source = "main") =>
+    variantMembers(d, source).map((n) => ({
+      id: n.id,
+      name: n.name,
+      values: Object.values(
+        (n.component as { variant: Variant }).variant.properties,
+      ),
+    }));
+  it("renames schema and states without replacing semantic keys or active/dormant overrides", () => {
+    const { h, id, other } = fixture();
+    const child = link(h, id).nodeMap.label;
+    h.execute(
+      updateNodes(h.document, {
+        [child]: {
+          text: { ...h.document.nodes[child].text!, content: "Custom text" },
+        },
+      }),
+    );
+    h.execute(switchVariant(h.document, id, other));
+    const priorEntries = h.statistics.undoEntries;
+    const before = h.document;
+    expect(
+      (before.nodes[id].component as Instance).variantOverrides,
+    ).toBeDefined();
+    const rows = rowsOf(before).map((r, i) => ({
+      ...r,
+      name: `State ${i}`,
+      values: [i ? "Hover" : "Default", "Small"],
+    }));
+    h.execute(editVariantSet(before, "main", ["Interaction", "Size"], rows));
+    expect(link(h, id)).toEqual(before.nodes[id].component);
+    expect(
+      (h.document.nodes[other].component as { variant: Variant }).variant.keys,
+    ).toEqual(
+      (before.nodes[other].component as { variant: Variant }).variant.keys,
+    );
+    expect(h.statistics.undoEntries).toBe(priorEntries + 1);
+    h.undo();
+    expect(h.document).toEqual(before);
+    h.redo();
+    expect(h.document.nodes[other].name).toBe("State 1");
+  });
+  it("rejects precise duplicate/invalid locations and locked members atomically", () => {
+    const { h, other } = fixture(),
+      d = h.document,
+      rows = rowsOf(d);
+    expect(() =>
+      editVariantSet(
+        d,
+        "main",
+        ["State"],
+        rows.map((r) => ({ ...r, values: ["same"] })),
+      ),
+    ).toThrow(/상태 2.*상태 1/);
+    expect(() => editVariantSet(d, "main", ["constructor"], rows)).toThrow(
+      /축 1 이름/,
+    );
+    expect(() =>
+      editVariantSet(
+        d,
+        "main",
+        ["State"],
+        rows.map((r) => ({ ...r, values: [""] })),
+      ),
+    ).toThrow(/상태 1 \/ 축 1/);
+    d.nodes[other].locked = true;
+    expect(() => editVariantSet(d, "main", ["Mode"], rows)).toThrow(
+      /잠긴 원본/,
+    );
+    expect(h.statistics.undoEntries).toBe(0);
+  });
+  it("deletes a source with visible snapshot detachment and restores links in one undo", () => {
+    const { h, id } = fixture(),
+      before = h.document;
+    h.execute(
+      editVariantSet(
+        before,
+        "main",
+        ["State"],
+        rowsOf(before).filter((r) => r.id !== "main"),
+      ),
+    );
+    expect(h.document.nodes.main).toBeUndefined();
+    expect(h.document.nodes[id].component).toBeUndefined();
+    expect(h.document.nodes[id].children).toEqual(before.nodes[id].children);
+    h.undo();
+    expect(h.document).toEqual(before);
+  });
+  it("keeps nested source rename/add/delete authored until history capture", () => {
+    const { h: initial, other } = fixture();
+    let d = initial.document;
+    d.nodes.outer = createNode("frame", d.rootId, {
+      id: "outer",
+      children: ["main", other],
+    });
+    d.nodes.main.parentId = "outer";
+    d.nodes[other].parentId = "outer";
+    d.nodes[d.rootId].children = d.nodes[d.rootId].children.filter(
+      (id) => id !== "main" && id !== other,
+    );
+    d.nodes[d.rootId].children.push("outer");
+    d = makeComponent(d, "outer");
+    const instance = createInstance(d, "outer");
+    const h = new DocumentHistory(instance.document),
+      before = h.document;
+    let rows = rowsOf(before);
+    rows[0].name = "Renamed";
+    h.execute(editVariantSet(before, "main", ["State"], rows));
+    const outerLink = h.document.nodes[instance.id].component as Instance;
+    expect(outerLink.overrides.main?.name).toBeUndefined();
+    h.execute(updateNodes(h.document, { main: { name: "Renamed again" } }));
+    expect(h.document.nodes[outerLink.nodeMap.main].name).toBe("Renamed again");
+    let draft = h.document;
+    const a = createVariant(draft, "main"),
+      b = createVariant(a.document, "main");
+    h.execute(
+      editVariantSet(b.document, "main", ["State"], rowsOf(b.document)),
+    );
+    expect(
+      h.document.nodes[
+        (h.document.nodes[instance.id].component as Instance).nodeMap[a.id]
+      ],
+    ).toBeDefined();
+    h.execute(
+      editVariantSet(
+        h.document,
+        "main",
+        ["State"],
+        rowsOf(h.document).filter((r) => r.id !== b.id),
+      ),
+    );
+    expect(h.document.nodes[b.id]).toBeUndefined();
+    const baseline = h.document,
+      stats = h.statistics.undoEntries;
+    const temporary = createVariant(baseline, "main");
+    h.execute(
+      editVariantSet(
+        temporary.document,
+        "main",
+        ["State"],
+        rowsOf(temporary.document).filter((r) => r.id !== temporary.id),
+      ),
+    );
+    expect(h.document).toEqual(baseline);
+    expect(h.statistics.undoEntries).toBe(stats);
   });
 });

@@ -113,3 +113,21 @@ in `finally`. Docker images/build cache remain. Reports/screenshots stay in igno
 `L05_SERVER=1` selects authenticated mode; `L05_REPORT` and `L05_SCREENSHOT` override artifact paths.
 No personal library or existing browser tab is used. Separate browser-only regressions are
 `clipboard.e2e.mjs`, `layers.e2e.mjs`, `grouping.e2e.mjs` and `transforms.e2e.mjs`.
+
+
+## Visual variants editor (D01)
+
+With Vite running on loopback, run `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/variants.e2e.mjs`.
+The suite covers visual axes/values/states, inline validation, draft cancel/Escape/no-op,
+exact save increments, Undo/Redo, value-name typing collisions, an unlocked selected
+source with a locked first member, state deletion/detachment, and the existing
+identity/active/dormant override, renderer and reload regressions.
+For authenticated production coverage run `node tests/variants-server.mjs`.
+It owns only `designfree-test-d01` on `127.0.0.1:43181`, refuses existing resources
+or an occupied port, pins `compose.yaml`, ignores personal `.env` and Compose overrides,
+and generates owner/database credentials in process environment only. It runs variants,
+components, auth and server-storage sequentially, then removes only that project's
+containers/network/volumes in `finally`. Docker images/build cache remain.
+Reports/screenshots stay under ignored `test-results/`. No personal library or
+existing browser tab is used. Unit cases also cover nested rename propagation,
+multiple staged additions/deletions and staged add/delete no-op behavior.

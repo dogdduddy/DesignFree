@@ -42,6 +42,27 @@ async function snapshot() {
   for await (const c of await (await wait).createReadStream()) chunks.push(c);
   return JSON.parse(Buffer.concat(chunks).toString());
 }
+async function revision() {
+  await snapshot();
+  if (auth) {
+    const r = await page.request.get(new URL("/api/library/current", url).href);
+    return (await r.json()).version;
+  }
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const r = indexedDB.open("draftroom-local-drafts", 1);
+        r.onerror = () => reject(r.error);
+        r.onsuccess = () => {
+          const db = r.result,
+            tx = db.transaction("drafts", "readonly"),
+            get = tx.objectStore("drafts").get("current");
+          get.onsuccess = () => resolve(get.result.revision);
+          tx.oncomplete = () => db.close();
+        };
+      }),
+  );
+}
 async function load(doc) {
   await page
     .locator('input[type="file"][accept="application/json,.json"]')
@@ -115,9 +136,15 @@ try {
       other = Object.values(d.nodes).find(
         (n) => n.component?.variant && n.id !== "main",
       ).id;
-      const input = page.getByLabel("Variant 속성", { exact: true });
-      await input.fill(JSON.stringify({ State: "Hover", Size: "Small" }));
-      await input.press("Enter");
+      await button("Variants 편집").click();
+      await page.getByLabel("상태 2 축 1 값", { exact: true }).fill("Hover");
+      await button("축 추가").click();
+      await page.getByLabel("축 2 이름", { exact: true }).fill("Size");
+      for (const r of [1, 2])
+        await page
+          .getByLabel(`상태 ${r} 축 2 값`, { exact: true })
+          .fill("Small");
+      await button("Variants 적용").click();
       d = await snapshot();
       assert.deepEqual(d.nodes.main.component.variant.properties, {
         State: "Default",
@@ -133,11 +160,108 @@ try {
   await check(
     "reject duplicate property tuple without history changes",
     async () => {
-      const before = await snapshot(),
-        input = page.getByLabel("Variant 속성", { exact: true });
-      await input.fill(JSON.stringify({ State: "Default", Size: "Small" }));
-      await input.press("Enter");
+      const before = await snapshot();
+      await button("Variants 편집").click();
+      await page.getByLabel("상태 2 축 1 값", { exact: true }).fill("Default");
+      await button("Variants 적용").click();
+      assert.match(await page.getByRole("alert").innerText(), /상태 2.*상태 1/);
       assert.deepEqual(await snapshot(), before);
+      await button("Variants 취소").click();
+    },
+  );
+  await check(
+    "visual draft cancel, no-op, axis/value/state transactions and save counts",
+    async () => {
+      const before = await snapshot();
+      const rev = await revision();
+      await button("Variants 편집").click();
+      await page.getByLabel("축 1 이름", { exact: true }).fill("Interaction");
+      await button("상태 추가").click();
+      await button("Variants 취소").click();
+      assert.deepEqual(await snapshot(), before);
+      assert.equal(await revision(), rev);
+      await button("Variants 편집").click();
+      await button("Variants 적용").click();
+      assert.deepEqual(await snapshot(), before);
+      assert.equal(await revision(), rev);
+      await button("Variants 편집").click();
+      await page.getByLabel("축 1 이름", { exact: true }).fill("Interaction");
+      await page.getByText("축 1 값 관리", { exact: true }).click();
+      await page.getByLabel("축 1 값 2 이름", { exact: true }).fill("Pressed");
+      await button("축 1 값 추가").click();
+      await page.getByLabel("상태 3 이름", { exact: true }).fill("New state");
+      await button("축 2 삭제").click();
+      await button("Variants 적용").click();
+      const after = await snapshot();
+      assert.equal(await revision(), rev + 1);
+      assert.equal(
+        after.nodes[other].component.variant.properties.Interaction,
+        "Pressed",
+      );
+      assert.equal(
+        after.nodes[other].component.variant.properties.Size,
+        undefined,
+      );
+      await button("실행 취소").click();
+      assert.deepEqual(await snapshot(), before);
+      await button("다시 실행").click();
+      assert.deepEqual(await snapshot(), after);
+      // Return to two original states so the identity regression continues unchanged.
+      await button("Variants 편집").click();
+      await button("상태 3 삭제").click();
+      await button("Variants 적용").click();
+      await button("Variants 편집").click();
+      await page.getByLabel("상태 2 축 1 값", { exact: true }).fill("");
+      await button("Variants 적용").click();
+      assert.match(await page.getByRole("alert").innerText(), /상태 2 \/ 축 1/);
+      await page.getByLabel("상태 2 축 1 값", { exact: true }).press("Escape");
+      assert.equal(await button("Variants 편집").count(), 1);
+    },
+  );
+  await check(
+    "buffer value renames across transient collisions and clone an unlocked selected state",
+    async () => {
+      await button("Variants 편집").click();
+      await page.getByLabel("상태 1 축 1 값", { exact: true }).fill("A");
+      await page.getByLabel("상태 2 축 1 값", { exact: true }).fill("AB");
+      await page.getByText("축 1 값 관리", { exact: true }).click();
+      const value = page.getByLabel("축 1 값 1 이름", { exact: true });
+      await value.click();
+      await value.press("End");
+      await value.pressSequentially("BC");
+      await value.press("Enter");
+      assert.equal(
+        await page.getByLabel("상태 1 축 1 값", { exact: true }).inputValue(),
+        "ABC",
+      );
+      assert.equal(
+        await page.getByLabel("상태 2 축 1 값", { exact: true }).inputValue(),
+        "AB",
+      );
+      await page.screenshot({ path: artifactPath("d01-visual-editor.png") });
+      await button("Variants 취소").click();
+      const before = await snapshot();
+      const locked = structuredClone(before);
+      locked.nodes.main.locked = true;
+      await load(locked);
+      await select(other);
+      await button("Variants 편집").click();
+      await button("상태 추가").click();
+      assert.equal(
+        await page.getByLabel("상태 3 이름", { exact: true }).count(),
+        1,
+      );
+      await button("Variants 적용").click();
+      assert.equal(
+        Object.values((await snapshot()).nodes).filter(
+          (n) => n.component?.variant,
+        ).length,
+        3,
+      );
+      await button("실행 취소").click();
+      assert.deepEqual(await snapshot(), locked);
+      await load(before);
+      await select(other);
     },
   );
   await check(
@@ -233,6 +357,32 @@ try {
         .selectOption("main");
       d = await snapshot();
       assert.equal(d.nodes[d.nodes[id].component.nodeMap.badge].width, 77);
+    },
+  );
+  await check(
+    "value deletion explains detach impact, preserves visible override and undoes connection",
+    async () => {
+      await select("main");
+      const before = await snapshot();
+      const rev = await revision();
+      await button("Variants 편집").click();
+      await page.getByText("축 1 값 관리", { exact: true }).click();
+      await button("축 1 값 1 삭제 (1개 상태)").click();
+      assert.match(
+        await page.getByTestId("variant-editor").innerText(),
+        /독립.*스냅샷/s,
+      );
+      await button("Variants 적용").click();
+      const after = await snapshot();
+      assert.equal(after.nodes.main, undefined);
+      assert.equal(after.nodes[id].component, undefined);
+      assert.equal(
+        after.nodes[before.nodes[id].component.nodeMap.badge].width,
+        77,
+      );
+      assert.equal(await revision(), rev + 1);
+      await button("실행 취소").click();
+      assert.deepEqual(await snapshot(), before);
     },
   );
   await check(
