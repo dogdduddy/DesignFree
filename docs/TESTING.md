@@ -131,3 +131,21 @@ containers/network/volumes in `finally`. Docker images/build cache remain.
 Reports/screenshots stay under ignored `test-results/`. No personal library or
 existing browser tab is used. Unit cases also cover nested rename propagation,
 multiple staged additions/deletions and staged add/delete no-op behavior.
+
+## Visual styles, tokens and themes (D02)
+
+With Vite running on loopback, run `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/style-editor.e2e.mjs`.
+Run `node tests/style-editor-server.mjs` for authenticated production/PostgreSQL coverage.
+It owns only `designfree-test-d02` on `127.0.0.1:43183`, refuses existing resources
+or an occupied port, pins `compose.yaml`, ignores personal `.env` and Compose overrides,
+and generates owner/database credentials only in process environment. It runs the visual
+editor, existing styles/components, auth and server-storage suites sequentially, and removes
+only that project's containers/network/volumes in `finally`. Images/build cache remain.
+Use `STYLE_SERVER=1` with explicit disposable credentials to select server mode manually.
+The visual suite has nine checkpoints covering typed creation/editing, token aliases,
+theme inheritance, field/reference errors, linked source/instance impact, one-save Apply,
+Undo/Redo, empty/reordered JSON no-ops, cancel/Escape, JSON roundtrip and reload.
+It checks that a color override does not mislabel inherited typography as overridden.
+`STYLE_EDITOR_REPORT` and `STYLE_EDITOR_SCREENSHOT` select ignored browser artifacts.
+The related renderer regression uses `EDITOR_URL` with `tests/style-renderers.e2e.mjs`.
+Physical IME, other browser engines and large-library performance are not covered.

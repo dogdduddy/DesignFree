@@ -250,3 +250,34 @@ describe("document-local shared styles and themes", () => {
     expect(() => validateDocument(malformed)).toThrow();
   });
 });
+
+it("treats empty and reordered library applications as no-ops without discarding redo", () => {
+  const doc = fixture();
+  const h = new DocumentHistory(doc);
+  expect(setStyleLibrary(doc, { tokens: {}, styles: {}, themes: {} })).toBe(
+    doc,
+  );
+  const lib = library();
+  const withLibrary = setStyleLibrary(doc, lib);
+  h.execute(withLibrary);
+  h.execute(switchTheme(h.document, "dark"));
+  h.undo();
+  const stats = h.statistics;
+  const reverseKeys = (value: any): any =>
+    Array.isArray(value)
+      ? value.map(reverseKeys)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value)
+              .reverse()
+              .map(([k, v]) => [k, reverseKeys(v)]),
+          )
+        : value;
+  const current = h.document;
+  const same = setStyleLibrary(current, reverseKeys(lib));
+  expect(same).toBe(current);
+  h.execute(same);
+  expect(h.statistics).toEqual(stats);
+  h.redo();
+  expect(h.document.styleLibrary?.activeTheme).toBe("dark");
+});

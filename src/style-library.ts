@@ -283,6 +283,22 @@ export function setStyleLibrary(
 ): SceneDocument {
   const next = { ...doc, styleLibrary: structuredClone(library) };
   validateDocument(next);
+  // Dictionary order is not authoring meaning. An absent library and an empty
+  // library are equivalent, so applying the initial editor is also a no-op.
+  const canonical = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (plain(value))
+      return `{${Object.keys(value)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+        .join(",")}}`;
+    return JSON.stringify(value);
+  };
+  if (
+    canonical(doc.styleLibrary ?? { tokens: {}, styles: {}, themes: {} }) ===
+    canonical(library)
+  )
+    return doc;
   return next;
 }
 export function switchTheme(doc: SceneDocument, theme?: string): SceneDocument {

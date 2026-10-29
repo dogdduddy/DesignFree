@@ -1631,3 +1631,39 @@ svg {
 .variant-actions {
   margin-top: 12px;
 }
+
+.style-visual-editor fieldset {
+  min-width: 0;
+  margin: 10px 0;
+  padding: 8px;
+  border: 1px solid #ddd6e8;
+}
+.style-visual-editor label {
+  display: block;
+  margin: 8px 0;
+  font-size: 11px;
+}
+.style-visual-editor input:not([type="checkbox"]),
+.style-visual-editor select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px;
+}
+.style-visual-editor button {
+  margin: 4px 3px 4px 0;
+  font-size: 11px;
+}
+.style-visual-editor details {
+  border-top: 1px solid #ddd6e8;
+  padding: 8px 0;
+}
+.style-visual-editor [role="alert"],
+.style-relationships {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.style-visual-editor [role="alert"] {
+  color: #a12c38;
+}

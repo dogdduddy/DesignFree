@@ -90,7 +90,7 @@ const openStyles = async () => {
     !(await details.getAttribute("open")) &&
     !(await details.evaluate((el) => el.open))
   )
-    await details.locator("summary").click();
+    await details.locator(":scope > summary").click();
 };
 const apply = async (value) => {
   await openStyles();

@@ -1,3 +1,5 @@
+import { diagnoseStyleLibrary } from "./style-library-inspection";
+import { StyleLibraryEditor } from "./StyleLibraryEditor";
 import { useState } from "react";
 import type { SceneDocument, SceneNode } from "./core";
 import {
@@ -35,6 +37,14 @@ export function StyleInspector({
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+  let jsonDiagnostics: ReturnType<typeof diagnoseStyleLibrary> = [];
+  if (draft !== null) {
+    try {
+      jsonDiagnostics = diagnoseStyleLibrary(JSON.parse(draft), doc);
+    } catch {
+      jsonDiagnostics = [{ path: "$", message: "JSON 구문을 확인하세요." }];
+    }
+  }
   const labels = { color: "색", text: "텍스트", effect: "효과" };
   return (
     <details
@@ -155,6 +165,11 @@ export function StyleInspector({
         색은 단일 solid, 효과는 순차 drop shadow입니다. 스타일이 연결된 속성은
         아래 편집기에서 직접 수정하기 전에 로컬 값으로 전환하세요.
       </p>
+      <StyleLibraryEditor
+        document={doc}
+        disabled={disabled}
+        onChange={onChange}
+      />
       <label className="property-field">
         라이브러리 (JSON)
         <textarea
@@ -182,6 +197,15 @@ export function StyleInspector({
         name·values(token ID별 값/참조). color/text/effect 타입이 일치해야
         합니다. 참조 중인 항목 삭제는 먼저 연결을 해제하세요.
       </p>
+      {jsonDiagnostics.length > 0 && (
+        <ul role="alert">
+          {jsonDiagnostics.map((d, i) => (
+            <li key={i}>
+              {d.path}: {d.message}
+            </li>
+          ))}
+        </ul>
+      )}
       {error && <p role="alert">{error}</p>}
     </details>
   );
