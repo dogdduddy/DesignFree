@@ -86,3 +86,16 @@ were built locally and were not published; PostgreSQL uses the pinned upstream i
 The host browser ran on ARM64. Native x86 hardware, Windows/Linux desktop browsers,
 physical IME, power-loss durability, performance and comprehensive AMD64 feature
 coverage remain **unverified**. Emulation success is not native-machine certification.
+
+## Flex/Grid canvas flow (L04)
+
+With Vite on loopback, run `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/flow-drop.e2e.mjs`.
+For isolated production/PostgreSQL coverage run `node tests/flow-drop-server.mjs`.
+The runner refuses pre-existing `designfree-test-l04` resources (including same-name
+volumes/network) or an occupied loopback port 43175, ignores personal `.env` and
+implicit Compose overrides, and creates fresh owner/database credentials only in
+process environment. It runs L04 flow acceptance plus existing Flex/Grid UI,
+auth and server-storage suites, and removes only that disposable project in `finally`.
+No personal installation or existing browser tab is used. Reports/screenshots stay
+under ignored `test-results/`; `FLOW_REPORT` and `FLOW_SCREENSHOT` override L04 paths.
+Pure CSS comparison suites require Vite and use `EDITOR_URL`, not `DRAFTROOM_URL`.

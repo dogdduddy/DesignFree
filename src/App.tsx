@@ -14,6 +14,12 @@ import { prepareFrameWeb, embeddedWebFont, type WebExport } from "./web-export";
 import { ensureFonts } from "./renderers/svg";
 import { useOwnerSession } from "./AuthGate";
 import { layerRows, layerWindow, LAYER_ROW_HEIGHT } from "./layer-window";
+import {
+  flowDropAt,
+  applyFlowDrop,
+  canFlowDrag,
+  type FlowDrop,
+} from "./flow-drop";
 import { computeLayout } from "./flex-layout";
 import { LayoutInspector } from "./LayoutInspector";
 import { PaintInspector } from "./PaintInspector";
@@ -306,6 +312,7 @@ export default function App() {
     else if (y + LAYER_ROW_HEIGHT > element.scrollTop + element.clientHeight)
       element.scrollTop = y + LAYER_ROW_HEIGHT - element.clientHeight;
   }, [selected]);
+  const [flowDrop, setFlowDrop] = useState<FlowDrop | null>(null);
   const layerDrag = useRef<string[]>([]);
   const [layerDrop, setLayerDrop] = useState<{
     id: string;
@@ -347,6 +354,7 @@ export default function App() {
     setHoverPoint(null);
     setSnapGuides([]);
     setMarquee(null);
+    setFlowDrop(null);
     setLayerScroll(0);
     if (layerTree.current) layerTree.current.scrollTop = 0;
     didFit.current = false;
@@ -640,6 +648,7 @@ export default function App() {
     setGesturing(false);
     setSnapGuides([]);
     setMarquee(null);
+    setFlowDrop(null);
     gesture.current = null;
     history.current.undo();
     sync();
@@ -649,6 +658,7 @@ export default function App() {
     setGesturing(false);
     setSnapGuides([]);
     setMarquee(null);
+    setFlowDrop(null);
     gesture.current = null;
     history.current.redo();
     sync();
@@ -658,6 +668,7 @@ export default function App() {
     setGesturing(false);
     setSnapGuides([]);
     setMarquee(null);
+    setFlowDrop(null);
     setOption(false);
     if (gesture.current) {
       const originalSelection = gesture.current.originalSelection;
@@ -917,7 +928,8 @@ export default function App() {
         : [id];
     setSelected(ids);
     if (!ids.length) return;
-    if (layoutManaged(docRef.current, ids)) {
+    const flowOnly = layoutManaged(docRef.current, ids);
+    if (flowOnly && !canFlowDrag(docRef.current, ids)) {
       setGesturing(false);
       tell(layoutMessage);
       return;
@@ -925,6 +937,8 @@ export default function App() {
     history.current.beginTransaction();
     gesture.current = {
       mode: "drag",
+      flowOnly,
+      geometry: geometryRef.current,
       p: w,
       ids: arrangeableRoots(docRef.current, ids),
       base: docRef.current,
@@ -1052,13 +1066,26 @@ export default function App() {
         // Latch the choice for the gesture; releasing Alt never changes the source.
         if (Math.abs(dx) + Math.abs(dy) <= 1) return;
         g.moved = true;
-        if (g.altAtStart || e.altKey) {
+        if (!g.flowOnly && (g.altAtStart || e.altKey)) {
+          g.duplicated = true;
           const copied = duplicateNodes(g.base, g.ids);
           g.base = copied.document;
           g.ids = copied.ids;
           selectedRef.current = copied.ids;
           setSelected(copied.ids);
         }
+      }
+      const drop =
+        !g.duplicated && !g.altAtStart && !e.altKey
+          ? flowDropAt(g.base, g.geometry, g.ids, w)
+          : null;
+      setFlowDrop(drop);
+      g.flowDrop = drop;
+      if (drop || g.flowOnly) {
+        setSnapGuides([]);
+        preview(drop ? applyFlowDrop(g.base, g.ids, drop) : g.base);
+        sync();
+        return;
       }
       const snapped =
         e.altKey || e.metaKey
@@ -1097,6 +1124,7 @@ export default function App() {
     setGesturing(false);
     setSnapGuides([]);
     setMarquee(null);
+    setFlowDrop(null);
     const g = gesture.current;
     if (!g) return;
     if (g.mode === "marquee" && !g.moved && g.scope !== docRef.current.rootId) {
@@ -1123,6 +1151,8 @@ export default function App() {
       }
       if (
         g.mode === "drag" &&
+        !g.flowOnly &&
+        !g.flowDrop &&
         g.moved &&
         g.lastPointer &&
         !layoutManaged(geometryRef.current, [
@@ -2060,6 +2090,20 @@ export default function App() {
               width={size.width}
               height={size.height}
             >
+              {flowDrop && (
+                <line
+                  data-testid="flow-insertion"
+                  data-parent-id={flowDrop.parentId}
+                  data-index={flowDrop.index}
+                  x1={flowDrop.start.x * viewport.zoom + viewport.x}
+                  y1={flowDrop.start.y * viewport.zoom + viewport.y}
+                  x2={flowDrop.end.x * viewport.zoom + viewport.x}
+                  y2={flowDrop.end.y * viewport.zoom + viewport.y}
+                  stroke="#7560e8"
+                  strokeWidth={3}
+                  pointerEvents="none"
+                />
+              )}
               {marquee && (
                 <rect
                   data-testid="marquee"
