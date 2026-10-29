@@ -99,3 +99,17 @@ auth and server-storage suites, and removes only that disposable project in `fin
 No personal installation or existing browser tab is used. Reports/screenshots stay
 under ignored `test-results/`; `FLOW_REPORT` and `FLOW_SCREENSHOT` override L04 paths.
 Pure CSS comparison suites require Vite and use `EDITOR_URL`, not `DRAFTROOM_URL`.
+
+## Flex/Grid structural editing and clipboard (L05)
+
+With Vite running on loopback, run `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/layout-editing.e2e.mjs`.
+Run native clipboard suites sequentially: Chromium contexts share the operating-system clipboard.
+For production/PostgreSQL coverage run `node tests/layout-editing-server.mjs`. It owns only
+`designfree-test-l05` on loopback port 43177, refuses pre-existing project resources or an occupied
+port, pins `compose.yaml`, ignores `.env` and implicit overrides, and generates owner/database
+credentials in process environment only. It runs L05 acceptance, L04 flow, Flex/Grid UI, auth and
+server-storage suites sequentially, then removes only its disposable containers/network/volumes
+in `finally`. Docker images/build cache remain. Reports/screenshots stay in ignored `test-results/`.
+`L05_SERVER=1` selects authenticated mode; `L05_REPORT` and `L05_SCREENSHOT` override artifact paths.
+No personal library or existing browser tab is used. Separate browser-only regressions are
+`clipboard.e2e.mjs`, `layers.e2e.mjs`, `grouping.e2e.mjs` and `transforms.e2e.mjs`.

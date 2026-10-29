@@ -1,3 +1,5 @@
+import { layoutInsertionReason, LayoutEditError } from "./layout-editing";
+import { computeLayout } from "./flex-layout";
 import { resolveDocumentStyles } from "./style-library";
 import {
   createNode,
@@ -16,7 +18,7 @@ import {
 import { exportSvg } from "./renderers/svg";
 
 export const CLIPBOARD_MIME = "application/x-draftroom+json";
-type Placement = { parentId: string; local: Matrix };
+type Placement = { parentId: string; local: Matrix; sourceLocal?: Matrix };
 type Payload = {
   format: "draftroom/clipboard";
   version: 1;
@@ -62,6 +64,7 @@ export function copySelection(doc: SceneDocument, ids: string[]) {
     visit(id);
     placements[id] = {
       parentId: doc.nodes[id].parentId!,
+      sourceLocal: [...doc.nodes[id].transform],
       local: frameBasis
         ? multiplyMatrices(frameBasis, getWorldTransform(doc, id))
         : [...doc.nodes[id].transform],
@@ -80,16 +83,28 @@ export function copySelection(doc: SceneDocument, ids: string[]) {
   };
   // Conservative visible-subtree bounds include overflowing children and strokes.
   // Clipped descendants may add whitespace, but cannot crop visible content.
+  // Render from the complete source context: a copied fill/hug child can depend
+  // on ancestors which are intentionally absent from the portable payload.
+  const geometry = computeLayout(doc);
   const svgDoc = structuredClone(fragment);
+  for (const id of Object.keys(fragment.nodes)) {
+    if (id === root.id) continue;
+    svgDoc.nodes[id].width = geometry.nodes[id].width;
+    svgDoc.nodes[id].height = geometry.nodes[id].height;
+    svgDoc.nodes[id].text = geometry.nodes[id].text;
+    svgDoc.nodes[id].transform = roots.includes(id)
+      ? getWorldTransform(geometry, id)
+      : [...geometry.nodes[id].transform];
+  }
   let x = Infinity,
     y = Infinity,
     right = -Infinity,
     bottom = -Infinity;
   const include = (id: string) => {
-    const n = fragment.nodes[id];
+    const n = svgDoc.nodes[id];
     if (!n.visible) return;
-    const b = getWorldBounds(fragment, id),
-      m = getWorldTransform(fragment, id);
+    const b = getWorldBounds(svgDoc, id),
+      m = getWorldTransform(svgDoc, id);
     const stroke = (n.stroke?.width ?? 0) / 2;
     const sx = stroke * (Math.abs(m[0]) + Math.abs(m[2]));
     const sy = stroke * (Math.abs(m[1]) + Math.abs(m[3]));
@@ -137,7 +152,13 @@ function readPayload(json: string): Payload {
       placement.local.length !== 6 ||
       !placement.local.every(
         (v: unknown) => typeof v === "number" && Number.isFinite(v),
-      )
+      ) ||
+      (placement.sourceLocal !== undefined &&
+        (!Array.isArray(placement.sourceLocal) ||
+          placement.sourceLocal.length !== 6 ||
+          !placement.sourceLocal.every(
+            (v: unknown) => typeof v === "number" && Number.isFinite(v),
+          )))
     )
       throw new Error("Invalid clipboard placement");
   }
@@ -204,13 +225,15 @@ export function pasteSelection(
         ? oldParent
         : doc.nodes[doc.rootId]);
     const node = next.nodes[id];
+    const reason = layoutInsertionReason(doc, [node], parent.id);
+    if (reason) throw new LayoutEditError(reason);
+    const parentInverse = invertMatrix(getWorldTransform(doc, parent.id));
     node.parentId = parent.id;
     node.transform = target
       ? [...placement.local]
-      : multiplyMatrices(
-          invertMatrix(getWorldTransform(doc, parent.id)),
-          fragment.nodes[original].transform,
-        );
+      : oldParent && parent.id === oldParent.id && placement.sourceLocal
+        ? [...placement.sourceLocal]
+        : multiplyMatrices(parentInverse, fragment.nodes[original].transform);
     next.nodes[parent.id].children.push(id);
   });
   validateDocument(next);

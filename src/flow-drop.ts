@@ -49,6 +49,16 @@ export function flowDropAt(
     parentId = doc.nodes[parentId].parentId!;
   if (!flow(doc, parentId) || !canFlowDrag(doc, [parentId])) return null;
   const roots = new Set(selectionRoots(doc, ids));
+  // Absolute children move freely within their current container. Converting
+  // back to flow is an explicit inspector action; entering a new frame inserts.
+  if (
+    [...roots].every(
+      (id) =>
+        doc.nodes[id].parentId === parentId &&
+        doc.nodes[id].layout.position === "absolute",
+    )
+  )
+    return null;
   for (let a: string | null = parentId; a; a = doc.nodes[a].parentId)
     if (roots.has(a)) return null;
   const parent = geometry.nodes[parentId];

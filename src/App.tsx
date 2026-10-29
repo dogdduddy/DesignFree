@@ -1,3 +1,9 @@
+import {
+  layoutTransformBlocked as layoutManaged,
+  layoutGroupBlocked,
+  layoutReparentReason,
+  LayoutEditError,
+} from "./layout-editing";
 import { StyleInspector } from "./StyleInspector";
 import { createVariant } from "./variants";
 import {
@@ -135,34 +141,8 @@ const inverse = (m: Matrix): Matrix => {
 const uid = () => crypto.randomUUID();
 const isLocked = isNodeLocked;
 
-// Transform tools cannot write computed layout geometry back into authored nodes.
-function layoutManaged(doc: SceneDocument, ids: string[]) {
-  const managed = (n: SceneNode) =>
-    ["flex", "grid"].includes(n.layout?.mode) ||
-    (n.layout?.width !== undefined && n.layout.width !== "fixed") ||
-    (n.layout?.height !== undefined && n.layout.height !== "fixed") ||
-    [
-      n.layout?.minWidth,
-      n.layout?.maxWidth,
-      n.layout?.minHeight,
-      n.layout?.maxHeight,
-    ].some((value) => value !== undefined);
-  const descendants = (id: string): boolean => {
-    const n = doc.nodes[id];
-    return !!n && (managed(n) || n.children.some(descendants));
-  };
-  return ids.some((id) => {
-    if (descendants(id)) return true;
-    let node = doc.nodes[id];
-    while (node?.parentId) {
-      node = doc.nodes[node.parentId];
-      if (node && managed(node)) return true;
-    }
-    return false;
-  });
-}
 const layoutMessage =
-  "Flex/Grid 레이아웃은 레이아웃 설정에서 크기와 배치를 변경해 주세요. 이동·회전·그룹 변환은 지원하지 않습니다.";
+  "flow 또는 hug/fill·최소/최대 크기·안쪽 여백의 최소 크기로 계산되는 좌표는 자유 변환할 수 없습니다. 자식 배치를 absolute로 전환하고 fixed 크기를 사용하세요. 계산되는 조상도 먼저 변경해 주세요.";
 
 function bounds(doc: SceneDocument, ids: string[]) {
   const ps = ids.flatMap((id) => {
@@ -570,12 +550,17 @@ export default function App() {
         !!e.target.closest('input,textarea,[contenteditable="true"]'));
     const copy = (e: ClipboardEvent) => {
       if (blocked(e) || !e.clipboardData) return;
-      if (layoutManaged(docRef.current, selectedRef.current)) {
-        e.preventDefault();
-        tell(
-          "Flex 선택은 JSON 문서 저장으로 보존해 주세요. 클립보드 복사는 아직 지원하지 않습니다.",
+      if (e.type === "cut") {
+        const reason = layoutReparentReason(
+          docRef.current,
+          selectedRef.current,
+          docRef.current.rootId,
         );
-        return;
+        if (reason) {
+          e.preventDefault();
+          tell(reason);
+          return;
+        }
       }
       try {
         const data = copySelection(docRef.current, selectedRef.current);
@@ -610,9 +595,13 @@ export default function App() {
           selectedRef.current = result.ids;
           setSelected(result.ids);
         }
-      } catch {
+      } catch (error) {
         e.preventDefault();
-        tell("붙여넣을 수 없는 클립보드입니다. Draftroom에서 복사해 주세요.");
+        tell(
+          error instanceof LayoutEditError
+            ? error.message
+            : "붙여넣을 수 없는 클립보드입니다. Draftroom에서 복사해 주세요.",
+        );
       }
     };
     window.addEventListener("copy", copy);
@@ -722,8 +711,10 @@ export default function App() {
       } else if (mod && e.key.toLowerCase() === "g") {
         e.preventDefault();
         if (editing || e.repeat) return;
-        if (layoutManaged(docRef.current, selectedRef.current)) {
-          tell(layoutMessage);
+        if (layoutGroupBlocked(docRef.current, selectedRef.current)) {
+          tell(
+            "flow 부모 또는 계산 크기의 그룹은 흐름 참여와 경계 규칙을 바꾸므로 지원하지 않습니다. 레이어를 absolute 부모로 옮기고 fixed 크기를 사용하세요.",
+          );
           return;
         }
         const result = (e.shiftKey ? ungroupNodes : groupNodes)(
@@ -1487,20 +1478,12 @@ export default function App() {
             else beginText(id);
           }}
           draggable={
-            !isLocked(doc, id) &&
-            !editing &&
-            !gesturing &&
-            localDraft.ready &&
-            !layoutManaged(doc, selected.includes(id) ? selected : [id])
+            !isLocked(doc, id) && !editing && !gesturing && localDraft.ready
           }
           onDragStart={(e) => {
             if (
               (e.target as HTMLElement).closest("button") ||
-              gesture.current ||
-              layoutManaged(
-                docRef.current,
-                selected.includes(id) ? selected : [id],
-              )
+              gesture.current
             ) {
               e.preventDefault();
               return;
@@ -1533,17 +1516,22 @@ export default function App() {
             if (!layerDrop || layerDrop.id !== id || !layerDrag.current.length)
               return;
             const parent = layerDrop.zone === "inside" ? id : node.parentId!;
-            if (layoutManaged(docRef.current, [parent])) {
-              tell(layoutMessage);
-              setLayerDrop(null);
-              layerDrag.current = [];
-              return;
-            }
             const index =
               layerDrop.zone === "inside"
                 ? doc.nodes[parent].children.length
                 : doc.nodes[parent].children.indexOf(id) +
                   (layerDrop.zone === "after" ? 1 : 0);
+            const reason = layoutReparentReason(
+              docRef.current,
+              layerDrag.current,
+              parent,
+            );
+            if (reason) {
+              tell(reason);
+              layerDrag.current = [];
+              setLayerDrop(null);
+              return;
+            }
             const next = moveLayers(
               docRef.current,
               layerDrag.current,
@@ -2860,6 +2848,12 @@ export default function App() {
                   Shift: 비율 유지 / 회전 15° · Alt: 중심 기준
                 </p>
               </section>
+              {n.type === "group" && (
+                <p className="property-hint layout-managed-hint">
+                  그룹의 원본 경계 보정은 flow 배치와 충돌하므로 캔버스 flow
+                  삽입은 지원하지 않습니다. absolute 부모에서 편집하세요.
+                </p>
+              )}
               <LayoutInspector
                 key={"layout-" + n.id}
                 node={n}
@@ -2870,7 +2864,15 @@ export default function App() {
               />
               {layoutInGroup && (
                 <p className="property-hint layout-managed-hint">
-                  그룹 밖의 프레임에서 Flex/Grid 레이아웃을 설정해 주세요.
+                  그룹은 원본 자식 경계로 크기를 정하므로 내부 레이아웃 설정
+                  변경은 지원하지 않습니다. 그룹 밖으로 옮긴 뒤 설정해 주세요.
+                </p>
+              )}
+              {layoutGroupBlocked(doc, selected) && (
+                <p className="property-hint layout-managed-hint">
+                  flow 부모 또는 계산 크기의 그룹화·해제는 흐름 참여·경계 규칙을
+                  바꾸므로 지원하지 않습니다. absolute 부모와 fixed 크기를
+                  사용하세요.
                 </p>
               )}
               {managedSelection && (

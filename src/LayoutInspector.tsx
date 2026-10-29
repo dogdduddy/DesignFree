@@ -181,6 +181,15 @@ export function LayoutInspector({
           ["flow", "absolute"],
           (value) => patch({ position: value as Layout["position"] }),
         )}
+      {parent && ["flex", "grid"].includes(parent.layout.mode) && (
+        <p className="property-hint">
+          absolute는 원본 X/Y를 다시 사용합니다. flow로 돌아가면 원본
+          크기·제약·Grid 배치 규칙을 사용합니다. 계산 좌표는 원본에 덮어쓰지
+          않습니다. 부모 밖으로 이동하려면 레이어 패널에서 드래그하세요. flow의
+          Alt/Option 드래그 복제는 삽입 규칙과 함께 처리하지 않으므로 복제
+          명령을 사용하세요.
+        </p>
+      )}
       {parent?.layout.mode === "grid" && (
         <>
           {gridText("Grid 영역 이름", layout.grid?.area ?? "", (text) =>

@@ -1,3 +1,5 @@
+import { computeLayout } from "./flex-layout";
+import { flowContainer, layoutReparentReason } from "./layout-editing";
 import {
   getWorldTransform,
   multiplyMatrices,
@@ -37,10 +39,14 @@ export function moveLayers(
     roots.some((id) => isNodeLocked(doc, id))
   )
     return doc;
+  if (layoutReparentReason(doc, roots, parentId)) return doc;
   for (let p: string | null = parentId; p; p = doc.nodes[p].parentId)
     if (roots.includes(p)) return doc;
   try {
-    const inv = invertMatrix(getWorldTransform(doc, parentId));
+    // Geometry is read only for the intended coordinate conversion. Dimensions
+    // and layout rules stay authored, including when either ancestor is in flow.
+    const geometry = computeLayout(doc);
+    const inv = invertMatrix(getWorldTransform(geometry, parentId));
     const next = structuredClone(doc),
       chosen = new Set(roots);
     const before = parent.children
@@ -51,8 +57,21 @@ export function moveLayers(
       next.nodes[n.parentId!].children = next.nodes[
         n.parentId!
       ].children.filter((child) => child !== id);
-      if (n.parentId !== parentId)
-        n.transform = multiplyMatrices(inv, getWorldTransform(doc, id));
+      // Layout moves keep authored local fallback coordinates, as canvas flow
+      // insertion does. Leaving flow reveals those coordinates; never bake boxes.
+      if (
+        n.parentId !== parentId &&
+        !flowContainer(parent) &&
+        (!flowContainer(doc.nodes[n.parentId!]) ||
+          n.layout.position === "absolute")
+      )
+        n.transform = multiplyMatrices(inv, getWorldTransform(geometry, id));
+      if (
+        n.parentId !== parentId &&
+        flowContainer(parent) &&
+        n.layout.position === "absolute"
+      )
+        n.layout.position = "flow";
       n.parentId = parentId;
     }
     next.nodes[parentId].children.splice(before, 0, ...roots);
