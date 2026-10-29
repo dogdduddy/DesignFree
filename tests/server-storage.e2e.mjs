@@ -334,6 +334,9 @@ try {
       assert.equal((await snapshot()).name, "local stale work");
       assert.equal((await load()).document.name, "external newer");
       assert.equal(await button("저장 재시도").count(), 0);
+      await button("서버 버전 사용").click();
+      await saved();
+      assert.equal((await snapshot()).name, "external newer");
     },
   );
   await check(

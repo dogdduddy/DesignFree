@@ -1,5 +1,6 @@
 import { parseDocument, serializeDocument, type SceneDocument } from "./core";
 import { DraftConflictError, type StoredDraft } from "./local-draft-storage";
+import { ServerOutbox } from "./server-outbox";
 
 export type Library = { document: SceneDocument; documents: SceneDocument[] };
 export type SaveRequest = Library & {
@@ -42,10 +43,97 @@ async function responseJSON(response: Response, bootstrap = false) {
 /** Keep one immutable request until its ACK arrives, including manual retries. */
 export class ServerDraftStorage {
   pending?: { body: string; request: SaveRequest };
+  private journal: string | null = null;
+  private latest?: Library;
+  private confirmedVersion = 0;
+  private mutations: Promise<unknown> = Promise.resolve();
+  recoveryError?: unknown;
+  private mutate<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.mutations.then(action);
+    this.mutations = result.catch(() => {});
+    return result;
+  }
+  private async replace(
+    pending: { body: string; request: SaveRequest } | undefined,
+    latest?: Library,
+  ) {
+    const next = pending
+      ? JSON.stringify({ version: 1, body: pending.body, latest })
+      : null;
+    if (this.outbox) await this.outbox.transact(this.journal, next);
+    this.journal = next;
+    this.pending = pending;
+    this.latest = latest;
+  }
   constructor(
     private request: typeof fetch = (input, init) =>
       globalThis.fetch(input, init),
+    private outbox:
+      Pick<ServerOutbox, "transact"> | undefined = typeof window === "undefined"
+      ? undefined
+      : new ServerOutbox(),
   ) {}
+  /** Persist committed editor snapshots immediately, before debounce/network. */
+  stage(
+    document: SceneDocument,
+    revision: number | null,
+    documents: SceneDocument[] = [],
+  ) {
+    const latest = validateLibrary({ document, documents });
+    return this.mutate(async () => {
+      const request = this.pending?.request ?? {
+        ...latest,
+        operationId: crypto.randomUUID(),
+        expectedVersion: Math.max(revision ?? 0, this.confirmedVersion),
+      };
+      await this.replace(
+        this.pending ?? { request, body: JSON.stringify(request) },
+        latest,
+      );
+    });
+  }
+  /** Startup replay always consults the idempotency ledger before reading current state. */
+  async recover(): Promise<StoredDraft | null> {
+    this.recoveryError = undefined;
+    const journal = this.outbox ? await this.outbox.transact() : this.journal;
+    if (journal) {
+      const raw = JSON.parse(journal);
+      const request = JSON.parse(raw.body) as SaveRequest;
+      if (
+        raw.version !== 1 ||
+        typeof raw.body !== "string" ||
+        typeof request.operationId !== "string" ||
+        !/^[a-zA-Z0-9_-]{1,128}$/.test(request.operationId) ||
+        !Number.isSafeInteger(request.expectedVersion) ||
+        request.expectedVersion < 0 ||
+        request.expectedVersion >= Number.MAX_SAFE_INTEGER
+      )
+        throw new Error("Invalid server outbox request");
+      validateLibrary(request);
+      this.journal = journal;
+      this.pending = { body: raw.body, request };
+      this.latest = validateLibrary(raw.latest);
+      try {
+        while (this.pending) await this.send();
+      } catch (error) {
+        this.recoveryError = error;
+        return {
+          ...this.latest!,
+          version: 2,
+          revision: this.pending!.request.expectedVersion,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+    return this.load();
+  }
+  async useServer(): Promise<StoredDraft | null> {
+    // Failed reads must never discard the local recovery copy.
+    const current = await this.load();
+    await this.mutate(() => this.replace(undefined));
+    this.recoveryError = undefined;
+    return current;
+  }
   async load(): Promise<StoredDraft | null> {
     const raw = await responseJSON(
       await this.request("/api/library/current", {
@@ -74,15 +162,12 @@ export class ServerDraftStorage {
     revision: number | null,
     documents: SceneDocument[] = [],
   ): Promise<StoredDraft> {
-    if (!this.pending) {
-      const request = {
-        ...validateLibrary({ document, documents }),
-        operationId: crypto.randomUUID(),
-        expectedVersion: revision ?? 0,
-      };
-      this.pending = { request, body: JSON.stringify(request) };
-    }
-    const pending = this.pending;
+    if (!this.pending) await this.stage(document, revision, documents);
+    return this.send();
+  }
+  private async send(): Promise<StoredDraft> {
+    await this.mutations;
+    const pending = this.pending!;
     const ack = (await responseJSON(
       await this.request("/api/library/current", {
         method: "PUT",
@@ -98,7 +183,24 @@ export class ServerDraftStorage {
       !Number.isFinite(Date.parse(ack.updatedAt))
     )
       throw new Error("Invalid server acknowledgement");
-    this.pending = undefined;
+    await this.mutate(async () => {
+      const latest = this.latest!;
+      if (
+        JSON.stringify(latest) !==
+        JSON.stringify({
+          document: pending.request.document,
+          documents: pending.request.documents,
+        })
+      ) {
+        const request = {
+          ...latest,
+          operationId: crypto.randomUUID(),
+          expectedVersion: ack.version,
+        };
+        await this.replace({ request, body: JSON.stringify(request) }, latest);
+      } else await this.replace(undefined);
+      this.confirmedVersion = ack.version;
+    });
     return {
       version: 2,
       revision: ack.version,

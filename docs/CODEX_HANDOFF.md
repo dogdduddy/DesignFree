@@ -6,7 +6,7 @@ This initial snapshot includes the latest local product working tree, including 
 
 Implemented: selection/marquee, snapping/guides, clipboard/grouping/parenting, affine resize/rotation, text/paint controls, alignment/distribution, JSON/SVG/PNG/web exports, document/page library, authenticated PostgreSQL/asset persistence, backups/migrations, Flex/Grid subsets, components/variants, styles/tokens/themes. These are scoped subsets, not complete Figma equivalence.
 
-Vite defaults to IndexedDB; Docker uses server mode with a single owner/shared library. Modes are separate and require manual JSON transfer. Server saves use expected version and immutable operation ID, ACK only after PostgreSQL COMMIT, and memory preservation on uncertainty/conflict. Image bytes use a separate volume. Read FEATURES.md for retry and restore semantics.
+Vite defaults to IndexedDB; Docker uses server mode with a single owner/shared library. Modes are separate and require manual JSON transfer. Server saves use expected version and immutable operation ID, ACK only after PostgreSQL COMMIT, and an IndexedDB durable outbox with explicit uncertainty/conflict recovery. Image bytes use a separate volume. Read FEATURES.md for retry and restore semantics.
 
 SVG remains default. CanvasKit uses browser-shaped text tiles. Performance/parity claims need freshly generated fingerprinted fixtures. Physical Korean IME, all OS/browsers, arbitrary rich text/bidi and GPU memory are not certified. Flex/Grid meaning is authored separately from computed geometry. Fixed HTML/CSS export is not a general responsive component generator.
 

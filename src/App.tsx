@@ -105,7 +105,7 @@ import {
   renamePage,
   switchPage,
 } from "./documents";
-import { serverStorage } from "./server-storage";
+import { serverStorage, validateLibrary } from "./server-storage";
 import { useLocalDraft } from "./use-local-draft";
 import { CLIPBOARD_MIME, copySelection, pasteSelection } from "./clipboard";
 
@@ -1233,7 +1233,21 @@ export default function App() {
     if (!readyRef.current) return;
     const epoch = documentEpoch.current;
     try {
-      const d = parseDocument(await file.text());
+      const raw = JSON.parse(await file.text());
+      if (raw && typeof raw === "object" && "documents" in raw) {
+        const library = validateLibrary(raw);
+        if (epoch !== documentEpoch.current || libraryBusy) return;
+        if (
+          !window.confirm(
+            "복구본으로 현재 문서 라이브러리 전체를 대체합니다. 계속할까요?",
+          )
+        )
+          return;
+        changeDocument(library.document, library.documents);
+        tell("복구본 라이브러리를 불러왔습니다. 기존 라이브러리를 대체합니다.");
+        return;
+      }
+      const d = parseDocument(JSON.stringify(raw));
       if (epoch !== documentEpoch.current) return;
       if (localDraft.documents.some((other) => other.id === d.id)) d.id = uid();
       documentEpoch.current++;
@@ -1840,6 +1854,38 @@ export default function App() {
       {localDraft.detail && (
         <div className="draft-notice" role="alert">
           <span>{localDraft.detail}</span>
+          {serverStorage &&
+            ["error", "conflict"].includes(localDraft.status) && (
+              <>
+                <button
+                  onClick={() => {
+                    const blob = new Blob([localDraft.backup()], {
+                      type: "application/json",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "designfree-recovery-library.json";
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  }}
+                >
+                  로컬 복구본 JSON 백업
+                </button>
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "현재 로컬 작업과 브라우저 복구본을 버리고 서버 버전을 엽니다. 필요한 작업은 먼저 로컬 복구본 JSON으로 백업하세요.",
+                      )
+                    )
+                      localDraft.useServer();
+                  }}
+                >
+                  서버 버전 사용
+                </button>
+              </>
+            )}
           {localDraft.canRetry && (
             <button onClick={localDraft.retry}>저장 재시도</button>
           )}

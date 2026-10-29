@@ -149,3 +149,24 @@ It checks that a color override does not mislabel inherited typography as overri
 `STYLE_EDITOR_REPORT` and `STYLE_EDITOR_SCREENSHOT` select ignored browser artifacts.
 The related renderer regression uses `EDITOR_URL` with `tests/style-renderers.e2e.mjs`.
 Physical IME, other browser engines and large-library performance are not covered.
+
+
+## Durable server outbox (S05)
+
+Run `node tests/outbox-server.mjs` with Docker running. It owns only
+`designfree-test-s05` on `127.0.0.1:43185`, refuses existing project resources and
+occupied ports, pins `compose.yaml`, ignores `.env`/implicit Compose overrides,
+and generates database/owner credentials in process environment only. It runs
+`outbox.e2e.mjs`, auth and server-storage regressions sequentially and removes
+only that project's containers, network and volumes in `finally`.
+Reports/screenshots remain in ignored `test-results/`; images/build cache remain.
+
+The outbox suite uses real editor controls and PostgreSQL, aborts a response after
+COMMIT, closes/reopens the tab in the same browser context, checks byte-identical
+replay and exact version increments, reloads with the API offline, edits while
+recovery is paused, and checks stale-conflict backup/cancel/failed-read/discard and
+recovery-library import. Offline API faults leave the HTTP app shell available;
+this does not certify loading the shell with the whole network disconnected.
+Unit tests inject durable-write failure and cross-writer compare-and-swap races.
+Other browser engines, disk eviction, physical power loss and large-library
+performance need separate verification.
