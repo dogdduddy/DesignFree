@@ -8,7 +8,8 @@ import {
   setStyleLibrary,
   switchTheme,
   type StyleEntry,
-  type StyleKind,
+  type StyleBinding,
+  compatibleStyleBinding,
   type StyleLibrary,
 } from "./style-library";
 const empty = (): StyleLibrary => ({ tokens: {}, styles: {}, themes: {} });
@@ -45,7 +46,16 @@ export function StyleInspector({
       jsonDiagnostics = [{ path: "$", message: "JSON 구문을 확인하세요." }];
     }
   }
-  const labels = { color: "색", text: "텍스트", effect: "효과" };
+  const labels = {
+    color: "색",
+    text: "텍스트",
+    effect: "효과",
+    gap: "간격",
+    padding: "안쪽 여백 (전체)",
+    width: "너비",
+    height: "높이",
+    radius: "모서리",
+  };
   return (
     <details
       className="inspector-section style-library-inspector"
@@ -71,7 +81,18 @@ export function StyleInspector({
         </select>
       </label>
       {node &&
-        (["color", "text", "effect"] as StyleKind[])
+        (
+          [
+            "color",
+            "text",
+            "effect",
+            "gap",
+            "padding",
+            "width",
+            "height",
+            "radius",
+          ] as StyleBinding[]
+        )
           .filter((kind) => kind !== "text" || node.text)
           .map((kind) => (
             <div key={kind}>
@@ -94,7 +115,7 @@ export function StyleInspector({
                 >
                   <option value="">로컬 값</option>
                   {Object.entries(library.styles)
-                    .filter(([, s]) => s.kind === kind)
+                    .filter(([, s]) => compatibleStyleBinding(kind, s.kind))
                     .map(([id, s]) => (
                       <option key={id} value={id}>
                         {s.name}
@@ -133,7 +154,7 @@ export function StyleInspector({
                         name: `${node.name} 텍스트`,
                         value: text,
                       };
-                    } else
+                    } else if (kind === "effect")
                       entry = {
                         kind,
                         name: `${node.name} 효과`,
@@ -147,6 +168,31 @@ export function StyleInspector({
                           },
                         ],
                       };
+                    else {
+                      const value =
+                        kind === "gap"
+                          ? (resolved.layout.gap ?? 0)
+                          : kind === "padding"
+                            ? (resolved.layout.padding?.[0] ?? 0)
+                            : resolved[kind];
+                      if (
+                        kind === "padding" &&
+                        resolved.layout.padding?.some((side) => side !== value)
+                      )
+                        throw new Error(
+                          "전체 여백 스타일은 네 방향의 값이 같아야 합니다.",
+                        );
+                      entry = {
+                        kind:
+                          kind === "gap" || kind === "padding"
+                            ? "spacing"
+                            : kind === "radius"
+                              ? "radius"
+                              : "number",
+                        name: `${node.name} ${labels[kind]}`,
+                        value,
+                      };
+                    }
                     next.styles[id] = entry;
                     return bindStyle(
                       setStyleLibrary(doc, next),
@@ -163,7 +209,9 @@ export function StyleInspector({
           ))}
       <p className="property-hint">
         색은 단일 solid, 효과는 순차 drop shadow입니다. 스타일이 연결된 속성은
-        아래 편집기에서 직접 수정하기 전에 로컬 값으로 전환하세요.
+        아래 편집기에서 직접 수정하기 전에 로컬 값으로 전환하세요. 숫자는
+        0–10,000,000이며 전체 여백은 네 방향에 적용됩니다. 너비·높이 토큰은
+        fixed 원본 크기에 적용되며 hug/fill 규칙은 유지됩니다.
       </p>
       <StyleLibraryEditor
         document={doc}
@@ -194,8 +242,8 @@ export function StyleInspector({
       </button>
       <p className="property-hint">
         tokens/styles: kind·name·value. 참조는 {`{"ref":"token-id"}`}, themes:
-        name·values(token ID별 값/참조). color/text/effect 타입이 일치해야
-        합니다. 참조 중인 항목 삭제는 먼저 연결을 해제하세요.
+        name·values(token ID별 값/참조). color/text/effect/number/spacing/radius
+        타입이 일치해야 합니다. 참조 중인 항목 삭제는 먼저 연결을 해제하세요.
       </p>
       {jsonDiagnostics.length > 0 && (
         <ul role="alert">

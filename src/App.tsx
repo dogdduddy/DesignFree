@@ -1,3 +1,4 @@
+import { SharedStyleLibraryInspector } from "./SharedStyleLibraryInspector";
 import {
   layoutTransformBlocked as layoutManaged,
   layoutGroupBlocked,
@@ -2508,6 +2509,13 @@ export default function App() {
             <span className="active">디자인</span>
             <SlidersHorizontal size={14} />
           </div>
+          <SharedStyleLibraryInspector
+            key={`shared-${doc.id}`}
+            document={doc}
+            documents={localDraft.documents}
+            disabled={transformBusy}
+            onChange={execute}
+          />
           <StyleInspector
             key={doc.id}
             document={doc}
@@ -2826,19 +2834,23 @@ export default function App() {
                   )}
                   {field(
                     "W",
-                    n.width,
+                    n.styleRefs?.width ? geometry.nodes[n.id].width : n.width,
                     (v) => resizeNumeric("width", v),
                     !editable ||
                       transformBusy ||
+                      !!n.styleRefs?.width ||
                       (n.layout?.width ?? "fixed") !== "fixed" ||
                       (!managedSelection && !transformBounds),
                   )}
                   {field(
                     "H",
-                    n.height,
+                    n.styleRefs?.height
+                      ? geometry.nodes[n.id].height
+                      : n.height,
                     (v) => resizeNumeric("height", v),
                     !editable ||
                       transformBusy ||
+                      !!n.styleRefs?.height ||
                       (n.layout?.height ?? "fixed") !== "fixed" ||
                       (!managedSelection && !transformBounds),
                   )}
@@ -2846,9 +2858,11 @@ export default function App() {
                 <div className="field-grid single-row">
                   {field(
                     "모서리",
-                    n.radius,
+                    n.styleRefs?.radius
+                      ? geometry.nodes[n.id].radius
+                      : n.radius,
                     (v) => updateOne({ radius: Math.max(0, v) }),
-                    !editable || n.type === "group",
+                    !editable || n.type === "group" || !!n.styleRefs?.radius,
                   )}
                   {field(
                     "불투명도",

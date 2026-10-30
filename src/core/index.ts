@@ -1,4 +1,8 @@
 import {
+  validateSharedStyleLibraries,
+  type SharedStyleLibrary,
+} from "../shared-style-library";
+import {
   validateDocumentStyles,
   type StyleLibrary,
   type StyleRefs,
@@ -84,6 +88,7 @@ export type ImageAsset = {
 export type SceneDocument = {
   schemaVersion: 1 | 2;
   styleLibrary?: StyleLibrary;
+  sharedStyleLibraries?: SharedStyleLibrary[];
   /** v2: ordered page roots; rootId is the active page. */
   pageIds?: string[];
   id: string;
@@ -502,6 +507,7 @@ export function validateDocument(
   }
   if (seen.size !== ids.length) fail();
   validateVariantSets(value as SceneDocument);
+  validateSharedStyleLibraries((value as SceneDocument).sharedStyleLibraries);
   validateDocumentStyles(value as SceneDocument);
 }
 export function serializeDocument(doc: SceneDocument): string {

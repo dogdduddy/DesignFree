@@ -1,6 +1,16 @@
 import { validateDocument, type SceneDocument, type SceneNode } from "./core";
 
-export type StyleKind = "color" | "text" | "effect";
+export type StyleKind =
+  "color" | "text" | "effect" | "number" | "spacing" | "radius";
+export type StyleBinding =
+  | "color"
+  | "text"
+  | "effect"
+  | "gap"
+  | "padding"
+  | "width"
+  | "height"
+  | "radius";
 export type TextStyle = Omit<
   NonNullable<SceneNode["text"]>,
   "content" | "sizing"
@@ -13,7 +23,14 @@ export type Shadow = {
   blur: number;
   color: string;
 };
-export type StyleValues = { color: string; text: TextStyle; effect: Shadow[] };
+export type StyleValues = {
+  color: string;
+  text: TextStyle;
+  effect: Shadow[];
+  number: number;
+  spacing: number;
+  radius: number;
+};
 export type StyleValue = StyleValues[StyleKind];
 export type TokenReference = { ref: string };
 export type StyleEntry = {
@@ -32,7 +49,34 @@ export type StyleLibrary = {
   >;
   activeTheme?: string;
 };
-export type StyleRefs = Partial<Record<StyleKind, string>>;
+export type StyleRefs = Partial<Record<StyleBinding, string>>;
+export const styleKinds: StyleKind[] = [
+  "color",
+  "text",
+  "effect",
+  "number",
+  "spacing",
+  "radius",
+];
+export const styleBindings: StyleBinding[] = [
+  "color",
+  "text",
+  "effect",
+  "gap",
+  "padding",
+  "width",
+  "height",
+  "radius",
+];
+/** Typed dimensions use numbers; spacing and radius also accept a generic number. */
+export function compatibleStyleBinding(binding: string, kind: string): boolean {
+  if (binding === "gap" || binding === "padding")
+    return kind === "spacing" || kind === "number";
+  if (binding === "width" || binding === "height") return kind === "number";
+  if (binding === "radius") return kind === "radius" || kind === "number";
+  return ["color", "text", "effect"].includes(binding) && binding === kind;
+}
+
 const plain = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const own = (v: object, k: string) => Object.hasOwn(v, k);
@@ -52,7 +96,7 @@ const reference = (v: unknown): v is TokenReference =>
 function fail(): never {
   throw new Error("스타일·토큰·theme 참조 또는 값이 올바르지 않습니다.");
 }
-const kinds: StyleKind[] = ["color", "text", "effect"];
+const kinds = styleKinds;
 export function validShadows(value: unknown): value is Shadow[] {
   return (
     Array.isArray(value) &&
@@ -76,6 +120,8 @@ export function validShadows(value: unknown): value is Shadow[] {
   );
 }
 function validValue(kind: StyleKind, v: unknown): boolean {
+  if (["number", "spacing", "radius"].includes(kind))
+    return finite(v) && v >= 0 && v <= 1e7;
   if (kind === "color") return color(v);
   if (kind === "effect") return validShadows(v);
   return (
@@ -202,7 +248,7 @@ export function validateDocumentStyles(doc: SceneDocument) {
   function refs(value: unknown) {
     if (
       !plain(value) ||
-      Object.keys(value).some((k) => !kinds.includes(k as StyleKind))
+      Object.keys(value).some((k) => !styleBindings.includes(k as StyleBinding))
     )
       fail();
     for (const [kind, id] of Object.entries(value)) {
@@ -210,7 +256,7 @@ export function validateDocumentStyles(doc: SceneDocument) {
         !key(id) ||
         !doc.styleLibrary ||
         !own(doc.styleLibrary.styles, id) ||
-        doc.styleLibrary.styles[id].kind !== kind
+        !compatibleStyleBinding(kind, doc.styleLibrary.styles[id].kind)
       )
         fail();
     }
@@ -236,7 +282,9 @@ export function validateDocumentStyles(doc: SceneDocument) {
     if (node.styleRefs === undefined) continue;
     if (
       !plain(node.styleRefs) ||
-      Object.keys(node.styleRefs).some((k) => !kinds.includes(k as StyleKind))
+      Object.keys(node.styleRefs).some(
+        (k) => !styleBindings.includes(k as StyleBinding),
+      )
     )
       fail();
     for (const [kind, id] of Object.entries(node.styleRefs)) {
@@ -244,7 +292,7 @@ export function validateDocumentStyles(doc: SceneDocument) {
         !key(id) ||
         !doc.styleLibrary ||
         !own(doc.styleLibrary.styles, id) ||
-        doc.styleLibrary.styles[id].kind !== kind ||
+        !compatibleStyleBinding(kind, doc.styleLibrary.styles[id].kind) ||
         (kind === "text" && !node.text)
       )
         fail();
@@ -273,6 +321,16 @@ export function resolveDocumentStyles(doc: SceneDocument): SceneDocument {
           ...(value as TextStyle),
         };
       } else if (kind === "effect") node.effects = value as Shadow[];
+      else if (kind === "gap") node.layout.gap = value as number;
+      else if (kind === "padding")
+        node.layout.padding = [value, value, value, value] as [
+          number,
+          number,
+          number,
+          number,
+        ];
+      else if (kind === "width" || kind === "height" || kind === "radius")
+        node[kind] = value as number;
     }
   }
   return next;
@@ -312,10 +370,12 @@ export function switchTheme(doc: SceneDocument, theme?: string): SceneDocument {
 export function bindStyle(
   doc: SceneDocument,
   id: string,
-  kind: StyleKind,
+  kind: StyleBinding,
   style?: string,
 ): SceneDocument {
-  if (!own(doc.nodes, id)) fail();
+  if (!own(doc.nodes, id) || !styleBindings.includes(kind)) fail();
+  if ((doc.nodes[id].styleRefs?.[kind] ?? undefined) === (style || undefined))
+    return doc;
   const next = structuredClone(doc);
   if (!style) {
     const resolved = resolveDocumentStyles(doc).nodes[id],
@@ -326,6 +386,11 @@ export function bindStyle(
     }
     if (kind === "text") node.text = structuredClone(resolved.text);
     if (kind === "effect") node.effects = structuredClone(resolved.effects);
+    if (kind === "gap") node.layout.gap = resolved.layout.gap;
+    if (kind === "padding")
+      node.layout.padding = structuredClone(resolved.layout.padding);
+    if (kind === "width" || kind === "height" || kind === "radius")
+      node[kind] = resolved[kind];
     if (node.styleRefs) {
       delete node.styleRefs[kind];
       if (!Object.keys(node.styleRefs).length) delete node.styleRefs;

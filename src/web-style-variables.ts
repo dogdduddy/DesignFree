@@ -48,6 +48,12 @@ export function webStyleVariables(
         css = `var(${styleVariable("token", value.ref, property)})`;
       else if (definition.kind === "color") css = value as string;
       else if (definition.kind === "effect") css = shadows(value as Shadow[]);
+      else if (
+        definition.kind === "number" ||
+        definition.kind === "spacing" ||
+        definition.kind === "radius"
+      )
+        css = `${value as number}px`;
       else {
         const t = value as TextStyle;
         css = {

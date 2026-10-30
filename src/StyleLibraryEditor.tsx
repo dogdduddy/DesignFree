@@ -12,8 +12,16 @@ import {
   type Shadow,
 } from "./style-library";
 
-const labels = { color: "색", text: "텍스트", effect: "효과" };
+const labels = {
+  color: "색",
+  text: "텍스트",
+  effect: "효과",
+  number: "숫자",
+  spacing: "간격",
+  radius: "모서리",
+};
 export function defaultStyleValue(kind: StyleKind): StyleValue {
+  if (["number", "spacing", "radius"].includes(kind)) return 8;
   if (kind === "color") return "#3366ff";
   if (kind === "text")
     return {
@@ -94,6 +102,8 @@ function ValueEditor({
               ))}
           </select>
         </label>
+      ) : ["number", "spacing", "radius"].includes(kind) ? (
+        number(`${labels[kind]} 값`, value as number, onChange)
       ) : kind === "color" ? (
         <label>
           색 값

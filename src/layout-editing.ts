@@ -4,6 +4,8 @@ export const flowContainer = (node?: SceneNode) =>
   !!node && ["flex", "grid"].includes(node.layout.mode);
 
 const derivedSize = (node: SceneNode) =>
+  !!node.styleRefs?.width ||
+  !!node.styleRefs?.height ||
   (flowContainer(node) &&
     ((node.layout.padding?.[1] ?? 0) + (node.layout.padding?.[3] ?? 0) >
       node.width ||

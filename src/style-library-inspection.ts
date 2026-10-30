@@ -1,6 +1,8 @@
 import type { SceneDocument } from "./core";
 import {
   validateStyleLibrary,
+  styleKinds,
+  compatibleStyleBinding,
   type StyleKind,
   type StyleValue,
 } from "./style-library";
@@ -31,7 +33,7 @@ export type StyleRelationship = {
 const plain = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const own = (v: object, key: string) => Object.hasOwn(v, key);
-const kinds = ["color", "text", "effect"];
+const kinds: string[] = styleKinds;
 const validKey = (v: unknown): v is string =>
   typeof v === "string" &&
   /^[A-Za-z0-9_-]{1,80}$/.test(v) &&
@@ -288,7 +290,10 @@ export function diagnoseStyleLibrary(
               "이름은 1–200자의 비어 있지 않은 문자열이어야 합니다.",
             );
           if (category !== "themes" && !kinds.includes(entry.kind))
-            add(`${path}.kind`, "색·텍스트·효과 종류가 필요합니다.");
+            add(
+              `${path}.kind`,
+              "색·텍스트·효과·숫자·간격·모서리 종류가 필요합니다.",
+            );
           if (category === "themes") {
             if (!plain(entry.values))
               add(`${path}.values`, "객체가 필요합니다.");
@@ -417,7 +422,7 @@ export function diagnoseStyleLibrary(
     for (const link of bindings(doc)) {
       if (!validKey(link.styleId) || !own(styles, link.styleId))
         add(link.path, "연결된 스타일이 없습니다.");
-      else if (styles[link.styleId]?.kind !== link.kind)
+      else if (!compatibleStyleBinding(link.kind, styles[link.styleId]?.kind))
         add(link.path, "연결된 스타일 종류가 일치하지 않습니다.");
       else if (
         link.source === "layer" &&

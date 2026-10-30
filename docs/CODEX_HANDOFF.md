@@ -13,7 +13,7 @@ SVG remains default. CanvasKit uses browser-shaped text tiles. Performance/parit
 ## Remaining work to assess, not automatic authorization
 
 - Physical IME, native x86 hardware and Linux/Windows desktop validation (AMD64 Docker emulation smoke/storage passed; see TESTING.md); large-document/component/style-library performance.
-- Numeric/spacing tokens, cross-document libraries and wider paint/effect support. Visual variant/style/token/theme editors are implemented; see FEATURES.md for their scoped behavior.
+- Wider paint/effect support and live library/version subscriptions. Numeric/spacing/radius bindings and explicit pinned cross-document library updates are implemented (D03); see FEATURES.md for scope and missing-reference rules.
 - Framework component generation, dynamic exported text reflow, wider responsive intrinsic sizing and remaining layout semantics. W02 exports CSS variables/theme sets and static component templates.
 - Collaboration/permissions/prototyping and broader SVG/Figma import.
 - TLS/remote deployment hardening and further server resource limits when requested.

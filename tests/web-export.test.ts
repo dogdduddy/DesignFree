@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createNode, type SceneDocument } from "../src/core";
 import { exportFrameWeb, prepareFrameWeb } from "../src/web-export";
+import { styleVariable, webStyleVariables } from "../src/web-style-variables";
+import { computeLayout } from "../src/flex-layout";
 function fixture() {
   const page = createNode("page", null, { id: "page", children: ["frame"] });
   const frame = createNode("frame", "page", {
@@ -28,6 +30,111 @@ function fixture() {
   } as SceneDocument;
 }
 describe("frame HTML/CSS export", () => {
+  it("keeps auto-sized text dimensions computed when numeric fallback dimensions are bound", () => {
+    for (const sizing of ["auto-width", "auto-height", "fixed"] as const) {
+      const doc = fixture();
+      doc.nodes.frame.layout = { mode: "absolute" };
+      doc.nodes.child = createNode("text", "frame", {
+        id: "child",
+        width: 300,
+        height: 300,
+        text: {
+          content: "ii",
+          sizing,
+          fontFamily: "sans-serif",
+          fontSize: 16,
+          fontWeight: 400,
+          lineHeight: 24,
+        },
+        styleRefs: { width: "size", height: "size" },
+      });
+      doc.styleLibrary = {
+        tokens: {},
+        styles: { size: { kind: "number", name: "Size", value: 300 } },
+        themes: {},
+      };
+      const before = JSON.stringify(doc),
+        computed = computeLayout(doc).nodes.child;
+      const result = exportFrameWeb(doc, "frame");
+      const rule = result.css.match(/\.dr-t0-1\{([^}]+)\}/)![1];
+      for (const axis of ["width", "height"] as const) {
+        const auto =
+          sizing === "auto-width" ||
+          (sizing === "auto-height" && axis === "height");
+        expect(rule).toContain(
+          `${axis}:${auto ? `${computed[axis]}px` : `var(${styleVariable("style", "size")})`}`,
+        );
+        if (auto) expect(rule).not.toContain(`${axis}:var(`);
+      }
+      expect(JSON.stringify(doc)).toBe(before);
+    }
+  });
+  it("exports numeric aliases and themed fixed dimensions without changing authored fallbacks", () => {
+    const doc = fixture();
+    doc.styleLibrary = {
+      tokens: {
+        size: { kind: "number", name: "Size", value: 70 },
+        alias: { kind: "number", name: "Alias", value: { ref: "size" } },
+        space: { kind: "spacing", name: "Space", value: 12 },
+        round: { kind: "radius", name: "Round", value: 6 },
+      },
+      styles: {
+        size: { kind: "number", name: "Size", value: { ref: "alias" } },
+        space: { kind: "spacing", name: "Space", value: { ref: "space" } },
+        round: { kind: "radius", name: "Round", value: { ref: "round" } },
+      },
+      themes: {
+        large: { name: "Large", values: { size: 110, space: 20, round: 10 } },
+      },
+      activeTheme: "large",
+    };
+    doc.nodes.frame.styleRefs = { gap: "space", padding: "space" };
+    doc.nodes.child.styleRefs = {
+      width: "size",
+      height: "size",
+      radius: "round",
+    };
+    const before = JSON.stringify(doc),
+      result = exportFrameWeb(doc, "frame");
+    expect(JSON.stringify(doc)).toBe(before);
+    expect(result.css).toContain(`${styleVariable("token", "size")}:110px`);
+    expect(result.css).toContain(`${styleVariable("token", "size")}:70px`);
+    expect(result.css).toContain(
+      `${styleVariable("token", "alias")}:var(${styleVariable("token", "size")})`,
+    );
+    for (const [property, id] of [
+      ["width", "size"],
+      ["height", "size"],
+      ["gap", "space"],
+      ["padding", "space"],
+      ["border-radius", "round"],
+    ])
+      expect(result.css).toContain(
+        `${property}:var(${styleVariable("style", id)})`,
+      );
+    const base = webStyleVariables(doc.styleLibrary);
+    expect(base).toContain(`${styleVariable("token", "space")}:12px`);
+    expect(base).toContain(`${styleVariable("token", "round")}:6px`);
+    // Binding a fallback dimension must not override computed fill/hug sizing.
+    doc.nodes.child.layout.width = "fill";
+    doc.nodes.child.layout.height = "hug";
+    const derived = exportFrameWeb(doc, "frame");
+    expect(derived.css).not.toContain(
+      `width:var(${styleVariable("style", "size")})`,
+    );
+    expect(derived.css).not.toContain(
+      `height:var(${styleVariable("style", "size")})`,
+    );
+    // Unsupported intrinsic layout keeps its derived positions and padding snapshot.
+    doc.nodes.frame.layout.width = "hug";
+    const frozen = exportFrameWeb(doc, "frame");
+    expect(frozen.css).not.toContain(
+      `padding:var(${styleVariable("style", "space")})`,
+    );
+    expect(frozen.css).not.toContain(
+      `gap:var(${styleVariable("style", "space")})`,
+    );
+  });
   it("exports computed layout, local root and preserves authoring", () => {
     const doc = fixture(),
       before = JSON.stringify(doc),

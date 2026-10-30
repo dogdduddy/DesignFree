@@ -54,7 +54,10 @@ export function StyleRelationships({
               {link.nodeName} ({link.nodeId}) ·{" "}
               {link.source === "variantOverride"
                 ? "보존된 variant override"
-                : source(link.nodeId, entry.kind)}
+                : source(
+                    link.nodeId,
+                    link.path.split(".").at(-1) ?? entry.kind,
+                  )}
               <br />
               {link.path}
             </li>

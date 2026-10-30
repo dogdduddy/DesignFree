@@ -20,6 +20,11 @@ export function LayoutInspector({
   if (node.type === "group" || node.type === "page") return null;
   const layout: Layout = node.layout ?? { mode: "absolute" };
   const patch = (change: Partial<Layout>) => {
+    if (
+      (change.gap !== undefined && node.styleRefs?.gap) ||
+      (change.padding !== undefined && node.styleRefs?.padding)
+    )
+      return;
     const next = { ...layout, ...change };
     if (
       (next.minWidth ?? 0) > (next.maxWidth ?? Infinity) ||
@@ -94,6 +99,7 @@ export function LayoutInspector({
     value: number | undefined,
     onValue: (v: number | undefined) => void,
     optional = false,
+    bound = false,
   ) => (
     <label className="number-field">
       <span>{label}</span>
@@ -103,7 +109,7 @@ export function LayoutInspector({
         min="0"
         placeholder={optional ? "없음" : undefined}
         value={value ?? ""}
-        disabled={disabled}
+        disabled={disabled || bound}
         onChange={(e) => {
           if (optional && e.target.value === "") onValue(undefined);
           else if (
@@ -257,15 +263,23 @@ export function LayoutInspector({
               gridPatch({ autoRows: tracks[0] });
             },
           )}
-          {number("Grid 간격", layout.gap ?? 0, (value) =>
-            patch({ gap: value ?? 0 }),
+          {number(
+            "Grid 간격",
+            node.styleRefs?.gap
+              ? (computed.layout.gap ?? 0)
+              : (layout.gap ?? 0),
+            (value) => patch({ gap: value ?? 0 }),
+            false,
+            !!node.styleRefs?.gap,
           )}
           <div className="field-grid">
             {["위", "오른쪽", "아래", "왼쪽"].map((side, index) => (
               <div key={side}>
                 {number(
                   `Grid 안쪽 여백 ${side}`,
-                  layout.padding?.[index] ?? 0,
+                  (node.styleRefs?.padding
+                    ? computed.layout.padding
+                    : layout.padding)?.[index] ?? 0,
                   (value) => {
                     const padding: [number, number, number, number] = [
                       ...(layout.padding ?? [0, 0, 0, 0]),
@@ -273,6 +287,8 @@ export function LayoutInspector({
                     padding[index] = value ?? 0;
                     patch({ padding });
                   },
+                  false,
+                  !!node.styleRefs?.padding,
                 )}
               </div>
             ))}
@@ -297,15 +313,23 @@ export function LayoutInspector({
             ["row", "column"],
             (value) => patch({ direction: value as Layout["direction"] }),
           )}
-          {number("Flex 간격", layout.gap ?? 0, (value) =>
-            patch({ gap: value ?? 0 }),
+          {number(
+            "Flex 간격",
+            node.styleRefs?.gap
+              ? (computed.layout.gap ?? 0)
+              : (layout.gap ?? 0),
+            (value) => patch({ gap: value ?? 0 }),
+            false,
+            !!node.styleRefs?.gap,
           )}
           <div className="field-grid">
             {["위", "오른쪽", "아래", "왼쪽"].map((side, index) => (
               <div key={side}>
                 {number(
                   `안쪽 여백 ${side}`,
-                  layout.padding?.[index] ?? 0,
+                  (node.styleRefs?.padding
+                    ? computed.layout.padding
+                    : layout.padding)?.[index] ?? 0,
                   (value) => {
                     const padding: [number, number, number, number] = [
                       ...(layout.padding ?? [0, 0, 0, 0]),
@@ -313,6 +337,8 @@ export function LayoutInspector({
                     padding[index] = value ?? 0;
                     patch({ padding });
                   },
+                  false,
+                  !!node.styleRefs?.padding,
                 )}
               </div>
             ))}

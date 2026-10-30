@@ -427,7 +427,7 @@ The visual editor (**스타일·토큰·테마 편집**) stages a library draft.
 
 **상속 관계 · 연결된 레이어 영향** lists base and all theme alias paths, terminal values, linked layer IDs/paths, source/instance inheritance and retained inactive variant overrides. The list is a union across themes, so a listed layer is potentially affected in at least one theme. Shared edits affect linked locked layers too. Live diagnostics locate invalid draft fields, missing/wrong-kind references, cycles and document bindings blocking deletion; the existing document validator remains the acceptance boundary. No invalid draft is persisted. Library JSON remains available for advanced editing and interchange.
 
-The library JSON accepts `tokens`, `styles`, `themes` and optional `activeTheme`. Token/style IDs use 1–80 ASCII letters, digits, `_` or `-` (reserved prototype names rejected); display names use 1–200 characters. Entries have `{kind, name, value}`. Kinds are `color` (hex), `text` (complete typography without content/sizing), and `effect` (up to eight sequential drop shadows). Tokens may reference other tokens with `{ "ref": "token-id" }`; a style may use a literal or same-kind token reference. There are at most 512 tokens, 512 styles and 16 themes. All references, including unused tokens and inactive themes/variant overrides, are checked; cycles, missing/wrong-kind references, invalid values and removal of a referenced style are rejected atomically. Theme values override token IDs and resolve aliases in the selected theme; unspecified values use the base token. Selecting **기본 값** removes the active theme selection.
+The library JSON accepts `tokens`, `styles`, `themes` and optional `activeTheme`. Token/style IDs use 1–80 ASCII letters, digits, `_` or `-` (reserved prototype names rejected); display names use 1–200 characters. Entries have `{kind, name, value}`. Kinds are `color` (hex), `text` (complete typography without content/sizing), `effect` (up to eight sequential drop shadows), and `number` / `spacing` / `radius` (finite scalar pixels from 0 to 10,000,000). Tokens may reference other tokens with `{ "ref": "token-id" }`; a style may use a literal or same-kind token reference. There are at most 512 tokens, 512 styles and 16 themes. All references, including unused tokens and inactive themes/variant overrides, are checked; cycles, missing/wrong-kind references, invalid values and removal of a referenced style are rejected atomically. Theme values override token IDs and resolve aliases in the selected theme; unspecified values use the base token. Selecting **기본 값** removes the active theme selection.
 
 ```json
 {
@@ -446,7 +446,7 @@ The library JSON accepts `tokens`, `styles`, `themes` and optional `activeTheme`
 
 Color styles replace the fill stack with one opaque solid paint; hex alpha remains supported. Typography replaces font family/size/weight/line height and optional tracking/alignment; omitted optional properties revert to their defaults. Styled auto text/group bounds and Flex/Grid geometry are derived after resolution without rewriting authored metrics. Effects use local-space `x/y` (±10,000), `blur` as Gaussian sigma (0–256), hex color including alpha, and sequential source-plus-shadow filtering of the node/subtree. SVG and CanvasKit render the stack; CSS exports use matching `drop-shadow()` filters. Ancestor clipping still applies; effect-bearing documents conservatively disable viewport subtree culling. SVG filter regions include transformed overflowing descendants with a four-sigma padding, not an infinite Gaussian guarantee.
 
-Duplicate retains document-local references. Clipboard emits detached current-theme snapshots, as for components. SVG/PNG export shows resolved styles. HTML/CSS includes variables, theme sets and static component templates (W02 below). Gradient/multi-paint shared color styles, numeric/spacing tokens, per-field typography token expressions, inset/spread/layer blur, cross-document libraries and per-node themes are outside this initial subset. Existing documents require no migration; older apps are not certified to preserve this additive metadata. Large-library performance, other browsers/OS, native x86 hardware and physical IME remain unverified. P01 covers only the AMD64 Docker smoke/storage workflow under ARM64 emulation.
+Duplicate retains document-local references. Clipboard emits detached current-theme snapshots, as for components. SVG/PNG export shows resolved styles. HTML/CSS includes variables, theme sets and static component templates (W02 below). Gradient/multi-paint shared color styles, per-field typography token expressions, inset/spread/layer blur and per-node themes remain outside this subset. Numeric bindings and pinned cross-document libraries are described under D03 below. Existing documents require no migration; older apps are not certified to preserve this additive metadata. Large-library performance, other browsers/OS, native x86 hardware and physical IME remain unverified. P01 covers only the AMD64 Docker smoke/storage workflow under ARM64 emulation.
 
 Validation: `npm test`, `npm run build`, `node tests/styles.e2e.mjs`, `node tests/style-renderers.e2e.mjs`. Use `STYLE_SERVER=1`, disposable owner credentials and `DRAFTROOM_URL` for authenticated persistence tests; `STYLE_REPORT`, `STYLE_SCREENSHOT` and `STYLE_PIXEL_REPORT` select artifacts.
 
@@ -465,7 +465,7 @@ via a layer-panel drop. The scenario exercises absolute layout, not a responsive
 ## CSS variables, theme sets and component markup (W02)
 
 The existing frame web preview and HTML/CSS downloads now include the document's
-color, typography and effect tokens/styles as CSS custom properties. Names use
+color, typography, effect and numeric tokens/styles as CSS custom properties. Names use
 `--dr-token-<ID length>-<ID>` / `--dr-style-<ID length>-<ID>`; typography adds
 `--font-family`, `--font-size`, `--font-weight`, `--line-height`,
 `--letter-spacing` and `--text-align`. IDs, rather than editable display names,
@@ -511,3 +511,58 @@ appearance reuse and template cloning. This is fixture-scoped Chromium coverage,
 not full-frame text/effect pixel certification. `tests/web-design-system-ui.e2e.mjs`
 checks real editor import/preview/download, matching CSS, three themes, one embedded
 font, no HTTP requests and unchanged authored JSON. See TESTING.md for commands.
+
+
+## Numeric tokens and shared document libraries (D03)
+
+The visual token/style editor accepts `number`, `spacing` and `radius` scalar pixel values,
+including same-kind aliases and per-theme values. A selected layer can bind styles to
+**간격**, **안쪽 여백 (전체)**, **너비**, **높이** and **모서리**. Gap/padding accept
+`spacing` or `number`, dimensions accept `number`, and corner radius accepts `radius` or
+`number`. Padding binds all four sides uniformly. Bindings use `styleRefs.gap`, `.padding`,
+`.width`, `.height` and `.radius`; tokens feed these styles through the existing alias model.
+Authored fallback geometry/layout is retained. Styles resolve before layout and rendering;
+fill/hug, text auto-sizing, min/max and container rules still determine computed dimensions.
+Gap/padding on absolute containers remain dormant until Flex/Grid is selected. Ellipse/group
+appearance follows their existing geometry rules. Detaching freezes the resolved scalar;
+layout constraints and intrinsic sizing continue to apply. Bound numeric inputs show their
+computed values and direct dimension transforms are blocked until detachment.
+
+Token/theme edits update linked layers, component instances and SVG/PNG export through the
+same derived scene. HTML/CSS emits scalar `px` custom properties and consumes them for supported
+semantic gap/padding, corners and authored fixed dimensions. Computed fill/hug, auto-sized text
+axes and group dimensions keep their existing computed export rules. The exported root frame
+retains W01's responsive viewport sizing. Theme sections preserve separately computed layout.
+Changing raw exported variables does not rerun the editor's intrinsic solver.
+
+**문서 간 공유 라이브러리** lists other documents in the current storage library. Select a
+source document and **공유 라이브러리 연결** to copy its current theme as a pinned snapshot.
+All token/style entries get stable local IDs, with aliases remapped to those IDs; consumer
+entries and themes do not collide with the source namespace. `sharedStyleLibraries` records
+source document ID/name and source-to-local token/style maps. A source document ID, rather
+than its display name, identifies an origin. Each consumer supports up to 16 source links;
+imported entries count toward the existing 512 token/style limits. JSON export/duplication
+retains provenance and self-contained values. Browser and server libraries stay separate.
+
+Source changes never silently edit another document or create background saves. Open the
+consumer and use **공유 업데이트** to apply the source's current selected-theme values in one
+history/save action. Existing IDs/bindings remain stable; newly added entries receive new IDs.
+Local edits and consumer theme overrides on imported tokens show **업데이트 가능**; refresh
+replaces them with source values and removes those imported-token overrides. Other local entries
+and theme overrides are preserved. Source kind changes that invalidate bindings reject the
+entire update atomically. Undo/Redo restores the consumer snapshot and provenance together;
+unchanged updates have no history/save. **로컬 라이브러리로 전환** removes only provenance,
+leaving entries, bindings and appearance intact.
+
+A missing source document, removed source entry or removed local snapshot shows **참조 누락**
+with an explicit reason. Missing source entries retain their last resolved values when surviving
+dependencies change during refresh. A missing source document disables refresh; the pinned
+snapshot still renders and exports offline. A source returning with the same document/entry IDs
+can be updated again. Local dangling layer/style/token aliases remain invalid and are diagnosed
+by the existing editor before Apply; missing external provenance does not invalidate an otherwise
+self-contained design. Deleting imported entries follows those same local-reference checks.
+
+This is explicit snapshot distribution within one owner's document library, without live
+cross-document synchronization, remote library URLs, permissions or version subscriptions.
+Only the source's selected theme is pinned; other source themes are not merged into consumers.
+Large-library performance and other browser engines/OS remain unverified.

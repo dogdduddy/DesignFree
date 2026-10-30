@@ -220,3 +220,33 @@ Images/build cache remain. The source-import geometry suite requires Vite separa
 Artifacts stay in ignored `test-results/w02-*`; no personal installation or open
 browser tabs are used. Full text/effect raster parity and other browsers remain
 unverified. Existing responsive and style-renderer suites are separate regressions.
+
+
+## Numeric bindings and pinned shared libraries (D03)
+
+With a disposable Vite server on loopback, run:
+
+```sh
+DRAFTROOM_URL=http://127.0.0.1:5183/ node tests/numeric-styles.e2e.mjs
+DRAFTROOM_URL=http://127.0.0.1:5183/ node tests/shared-style-libraries.e2e.mjs
+EDITOR_URL=http://127.0.0.1:5183/ node tests/web-numeric-styles.e2e.mjs
+```
+
+Numeric UI coverage authors typed tokens/styles/aliases/themes through the visual editor,
+binds gap/padding/dimensions/corners, checks exact save increments, Undo/Redo, detach,
+cancel/invalid/no-op, JSON and reload. Shared coverage imports synthetic documents through
+normal JSON recovery, then uses actual source editing, document switching, shared import/update,
+binding, export/download, missing-entry/source and local-conversion controls. It checks
+pinned isolation, stable IDs, derived values, exact save counts, Undo/Redo and reload.
+The source-import export suite compares three numeric themes plus a switch back with
+computed layout, including fixed/fill and auto-sized text axes, and checks no network access.
+
+Run `node tests/numeric-shared-server.mjs` for production/PostgreSQL coverage. It owns only
+`designfree-test-d03` on `127.0.0.1:43189`, refuses existing labeled or same-name project
+resources and occupied ports, pins `compose.yaml`, ignores personal `.env` and implicit
+Compose overrides, and generates owner/database credentials only in process environment.
+It runs shared/numeric UI, visual style editor, styles, components, auth and server-storage
+regressions sequentially, then removes only its disposable containers/network/volumes in
+`finally`. Images/build cache remain. Artifacts stay under ignored `test-results/`.
+No personal installation, document library or existing browser tab is used.
+Physical IME, other browser engines, large-library performance and native x86 are unverified.

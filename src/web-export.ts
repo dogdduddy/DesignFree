@@ -66,7 +66,9 @@ function exportFrameSnapshot(
   const layout = webLayout({ ...doc, nodes }, warnings);
   const rules = [
     ...(fontDataUrl ? [`/* ${fontLicense.replaceAll("*/", "* / ")} */`] : []),
-    "html,body{margin:0;padding:0} .dr-node{position:absolute;left:0;top:0;box-sizing:border-box;transform-origin:0 0} .dr-line{position:absolute;white-space:pre;line-height:1}",
+    // Theme sheets repeat the reset. Keep its specificity below per-node rules,
+    // including rules emitted by earlier themes in the combined stylesheet.
+    "html,body{margin:0;padding:0} :where(.dr-node){position:absolute;left:0;top:0;box-sizing:border-box;transform-origin:0 0} .dr-line{position:absolute;white-space:pre;line-height:1}",
   ];
   if (fontDataUrl)
     rules.push(
@@ -90,10 +92,22 @@ function exportFrameSnapshot(
   function visit(id: string, root = false): string {
     const node = doc.nodes[id];
     if (!node.visible) return "";
+    const refs = node.styleRefs;
+    // Only fixed dimensions consume variables. Fill/hug, text auto sizing and
+    // normalized group bounds retain their computed snapshot.
+    const dimension = (axis: "width" | "height") =>
+      refs?.[axis] &&
+      node.type !== "group" &&
+      node.text?.sizing !== "auto-width" &&
+      !(axis === "height" && node.text?.sizing === "auto-height") &&
+      (!source.nodes[id].layout[axis] ||
+        source.nodes[id].layout[axis] === "fixed")
+        ? `var(${styleVariable("style", refs[axis])})`
+        : px(node[axis]);
     const key = `${prefix}-${serial++}`,
       style = [
-        `width:${px(node.width)}`,
-        `height:${px(node.height)}`,
+        `width:${dimension("width")}`,
+        `height:${dimension("height")}`,
         `opacity:${node.opacity}`,
       ];
     if (node.effects?.length)
@@ -103,6 +117,13 @@ function exportFrameSnapshot(
     if (root) style.push("position:relative");
     else style.push(`transform:matrix(${node.transform.join(",")})`);
     style.push(...layout.styles(node, root));
+    if (layout.supported(id)) {
+      for (const property of ["gap", "padding"] as const)
+        if (refs?.[property])
+          style.push(
+            `${property}:var(${styleVariable("style", refs[property])})`,
+          );
+    }
     if (node.layout.width === "hug" || node.layout.height === "hug")
       warnings.add(
         `${node.name}: hug 크기는 내보내기 시점의 계산값으로 고정합니다.`,
@@ -171,8 +192,15 @@ function exportFrameSnapshot(
         throw new Error(`누락되거나 잘못된 PNG: ${node.name}`);
       content += `<img alt="${html(node.name)}" src="${asset.dataUrl}" style="display:block;width:100%;height:100%;object-fit:fill;border-radius:inherit">`;
     }
-    const refs = node.styleRefs;
     const appearance: string[] = [];
+    if (
+      refs?.radius &&
+      node.type !== "ellipse" &&
+      (node.type !== "group" || node.clipContent)
+    )
+      appearance.push(
+        `border-radius:var(${styleVariable("style", refs.radius)})`,
+      );
     if (refs?.color && node.type !== "group") {
       const value = `var(${styleVariable("style", refs.color)})`;
       appearance.push(
