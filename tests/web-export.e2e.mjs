@@ -62,6 +62,8 @@ try {
   root.children = ["frame"];
   const fixture = {
     ...demo,
+    // This geometry regression owns an unbound fixture, independent of prior server documents.
+    styleLibrary: undefined,
     schemaVersion: 1,
     pageIds: undefined,
     id: "web-fixture",

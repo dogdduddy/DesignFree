@@ -4,6 +4,7 @@ import { computeLayout } from "./flex-layout";
 import { webLayout } from "./web-layout";
 import { nodeFills } from "./paints";
 import { cssFont, missingFont, textLayout } from "./text-layout";
+import { webStyleVariables, styleVariable } from "./web-style-variables";
 
 const html = (value: string) =>
   value.replace(
@@ -27,11 +28,13 @@ export type WebExport = {
   height: number;
 };
 /** Semantic layout where supported; never changes authoring or executes imported markup. */
-export function exportFrameWeb(
+function exportFrameSnapshot(
   source: SceneDocument,
   frameId: string,
   fontDataUrl?: string,
-): WebExport {
+  prefix = "dr",
+  fontAvailable = !!fontDataUrl,
+): WebExport & { markup: string; templates: string } {
   validateDocument(source);
   if (
     !Object.hasOwn(source.nodes, frameId) ||
@@ -70,10 +73,24 @@ export function exportFrameWeb(
       `@font-face{font-family:'Noto Sans KR';src:url(${fontDataUrl}) format('truetype');font-weight:100 900;font-display:block}`,
     );
   let serial = 0;
+  const shared = new Map<string, string>();
+  const templates: string[] = [];
+  const componentClasses = new Map<string, string>();
+  for (const node of Object.values(doc.nodes)) {
+    const c = node.component;
+    if (c) {
+      const sourceId = c.kind === "main" ? node.id : c.sourceId;
+      if (!componentClasses.has(sourceId))
+        componentClasses.set(
+          sourceId,
+          `${prefix}-component-${componentClasses.size}`,
+        );
+    }
+  }
   function visit(id: string, root = false): string {
     const node = doc.nodes[id];
     if (!node.visible) return "";
-    const key = `dr-${serial++}`,
+    const key = `${prefix}-${serial++}`,
       style = [
         `width:${px(node.width)}`,
         `height:${px(node.height)}`,
@@ -111,7 +128,7 @@ export function exportFrameWeb(
         warnings.add(`${node.name}: text는 맨 위 solid 채우기만 사용합니다.`);
       if (missingFont(t.fontFamily))
         warnings.add(`${node.name}: 누락 폰트를 Noto Sans KR로 대체합니다.`);
-      if (!fontDataUrl && cssFont(t.fontFamily).includes("Noto Sans"))
+      if (!fontAvailable && cssFont(t.fontFamily).includes("Noto Sans"))
         warnings.add("Noto Sans KR 미포함: 시스템 폰트로 대체될 수 있습니다.");
       style.push(
         `color:${top ? color(top.color, top.opacity) : "transparent"}`,
@@ -154,8 +171,56 @@ export function exportFrameWeb(
         throw new Error(`누락되거나 잘못된 PNG: ${node.name}`);
       content += `<img alt="${html(node.name)}" src="${asset.dataUrl}" style="display:block;width:100%;height:100%;object-fit:fill;border-radius:inherit">`;
     }
-    rules.push(`.${key}{${style.join(";")}}`);
-    return `<div class="dr-node ${key}" data-node-id="${html(id)}" aria-label="${html(node.name)}">${content}${node.children.map((child) => visit(child)).join("")}</div>`;
+    const refs = node.styleRefs;
+    const appearance: string[] = [];
+    if (refs?.color && node.type !== "group") {
+      const value = `var(${styleVariable("style", refs.color)})`;
+      appearance.push(
+        node.type === "text"
+          ? `color:${value}`
+          : `background-image:linear-gradient(${value},${value})`,
+      );
+    }
+    if (refs?.effect)
+      appearance.push(`filter:var(${styleVariable("style", refs.effect)})`);
+    if (refs?.text && node.text) {
+      for (const property of [
+        "font-family",
+        "font-size",
+        "font-weight",
+        "letter-spacing",
+      ])
+        appearance.push(
+          `${property}:var(${styleVariable("style", refs.text, property)})`,
+        );
+    }
+    // Placement remains local; identical appearances share a reusable class.
+    const properties =
+      /^(color|background-image|filter|font-family|font-size|font-weight|letter-spacing|border-radius|opacity):/;
+    const local = style.filter((s) => !properties.test(s));
+    const paint = [
+      ...style.filter((s) => properties.test(s)),
+      ...appearance,
+    ].join(";");
+    let sharedClass = shared.get(paint);
+    if (!sharedClass) {
+      sharedClass = `${prefix}-appearance-${shared.size}`;
+      shared.set(paint, sharedClass);
+      rules.push(`.${sharedClass}{${paint}}`);
+    }
+    rules.push(`.${key}{${local.join(";")}}`);
+    const component = node.component;
+    const componentClass = component
+      ? componentClasses.get(
+          component.kind === "main" ? node.id : component.sourceId,
+        )
+      : undefined;
+    const markup = `<div class="dr-node ${key} ${sharedClass}${componentClass ? ` ${componentClass}` : ""}" data-node-id="${html(id)}"${componentClass ? ` data-dr-component="${componentClass}"` : ""} aria-label="${html(node.name)}">${content}${node.children.map((child) => visit(child)).join("")}</div>`;
+    if (componentClass)
+      templates.push(
+        `<template id="${key}-template" data-dr-component="${componentClass}">${markup}</template>`,
+      );
+    return markup;
   }
   const markup = visit(frameId, true),
     css = rules.join("\n");
@@ -163,11 +228,81 @@ export function exportFrameWeb(
     "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
   const result = `<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${html(frame.name)}</title><style>${css}</style></head><body>${markup}${fontDataUrl ? `<pre hidden>${html(fontLicense)}</pre>` : ""}</body></html>`;
   return {
+    markup,
+    templates: templates.join("\n"),
     html: result,
     css,
     warnings: [...warnings],
     width: frame.width,
     height: frame.height,
+  };
+}
+/** Standalone theme sets include separately computed text/layout snapshots.
+ * Switching the html data-dr-theme attribute needs no script or editor runtime.
+ */
+export function exportFrameWeb(
+  source: SceneDocument,
+  frameId: string,
+  fontDataUrl?: string,
+): WebExport {
+  validateDocument(source);
+  const library = source.styleLibrary;
+  if (!library) {
+    const result = exportFrameSnapshot(source, frameId, fontDataUrl);
+    return {
+      ...result,
+      html: result.html.replace("</body>", `${result.templates}</body>`),
+    };
+  }
+  const active = library.activeTheme ?? "";
+  const themes = [
+    active,
+    ...["", ...Object.keys(library.themes)].filter((id) => id !== active),
+  ];
+  const warnings = new Set<string>();
+  const sheets: string[] = [];
+  const markup: string[] = [];
+  let first: ReturnType<typeof exportFrameSnapshot> | undefined;
+  themes.forEach((theme, i) => {
+    const scene = structuredClone(source);
+    if (theme) scene.styleLibrary!.activeTheme = theme;
+    else delete scene.styleLibrary!.activeTheme;
+    const snapshot = exportFrameSnapshot(
+      scene,
+      frameId,
+      i === 0 ? fontDataUrl : undefined,
+      `dr-t${i}`,
+      !!fontDataUrl,
+    );
+    first ??= snapshot;
+    snapshot.warnings.forEach((warning) => warnings.add(warning));
+    const scope = `.dr-theme-${i}`;
+    sheets.push(
+      `${scope}{display:none;${webStyleVariables(library, theme || undefined)}}`,
+    );
+    sheets.push(`html[data-dr-theme="${theme}"] ${scope}{display:block}`);
+    sheets.push(snapshot.css);
+    markup.push(
+      `<section class="${scope.slice(1)}" data-dr-theme-set="${theme}">${snapshot.markup}${snapshot.templates}</section>`,
+    );
+  });
+  warnings.add(
+    "테마 전환: html의 data-dr-theme을 빈 문자열(기본) 또는 theme ID로 설정하세요. 각 테마의 텍스트·geometry는 별도 스냅샷이며 변수 수동 수정 시 재계산되지 않습니다. 컴포넌트 template은 해당 테마 안에서 복제하는 정적 마크업입니다.",
+  );
+  const css = sheets.join("\n");
+  const result = first!;
+  return {
+    html: result.html
+      .replace('<html lang="ko">', `<html lang="ko" data-dr-theme="${active}">`)
+      .replace(/<style>[\s\S]*?<\/style>/, () => `<style>${css}</style>`)
+      .replace(
+        /<body>[\s\S]*?<\/body>/,
+        () => `<body>${markup.join("\n")}</body>`,
+      ),
+    css,
+    warnings: [...warnings],
+    width: result.width,
+    height: result.height,
   };
 }
 export async function embeddedWebFont(): Promise<string> {

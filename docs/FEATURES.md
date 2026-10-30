@@ -388,7 +388,7 @@ Unsupported intrinsic algorithms emit a named warning and keep that container's 
 | PNG | Owned bytes embedded as `data:image/png`; stretch to computed bounds, inherit corner radius. Missing/invalid bytes fail export visibly. |
 | Unsupported styles | Linear/radial gradients and all strokes are omitted with per-node warnings, including text stroke. Multiple text fills reduce to top solid with a warning. No SVG fallback that would imply editable CSS semantics. |
 
-Preview shows the current export and limitations from the moment it opens. Close/reopen after editing. It uses an empty iframe sandbox and a restrictive CSP; names and text are escaped, font family uses the existing allowlist/fallback, assets allow only PNG data URLs. No interactions, links, JavaScript, remote fonts/images, SVG import, components/tokens, or accessibility semantics beyond generic named boxes are generated. Cross-browser/OS, huge document export, HTML/CSS pixel equivalence and full responsive CSS conformance remain unverified.
+Preview shows the current export and limitations from the moment it opens. Close/reopen after editing. It uses an empty iframe sandbox and a restrictive CSP; names and text are escaped, font family uses the existing allowlist/fallback, assets allow only PNG data URLs. No interactions, links, JavaScript, remote fonts/images, SVG import, or accessibility semantics beyond generic named boxes are generated. Cross-browser/OS, huge document export, HTML/CSS pixel equivalence and full responsive CSS conformance remain unverified.
 
 Validation: `npm test`, `npm run build`, `node tests/web-export.e2e.mjs`, `node tests/responsive-web-export.e2e.mjs`, `node tests/web-export-server.mjs`. The responsive suite compares exported standalone browser geometry against `computeLayout` at 320/480/768/1100px, including warning fallbacks. The browser fixture exercises actual inspector selection/import/downloads, nested computed Grid/Flex, affine coordinates, warning display, escaped Korean text, embedded font, independent HTML load without HTTP requests, and unchanged JSON/history.
 
@@ -446,7 +446,7 @@ The library JSON accepts `tokens`, `styles`, `themes` and optional `activeTheme`
 
 Color styles replace the fill stack with one opaque solid paint; hex alpha remains supported. Typography replaces font family/size/weight/line height and optional tracking/alignment; omitted optional properties revert to their defaults. Styled auto text/group bounds and Flex/Grid geometry are derived after resolution without rewriting authored metrics. Effects use local-space `x/y` (±10,000), `blur` as Gaussian sigma (0–256), hex color including alpha, and sequential source-plus-shadow filtering of the node/subtree. SVG and CanvasKit render the stack; CSS exports use matching `drop-shadow()` filters. Ancestor clipping still applies; effect-bearing documents conservatively disable viewport subtree culling. SVG filter regions include transformed overflowing descendants with a four-sigma padding, not an infinite Gaussian guarantee.
 
-Duplicate retains document-local references. Clipboard emits detached current-theme snapshots, as for components. SVG/PNG and HTML/CSS export show resolved styles; CSS custom properties, responsive theme export, gradient/multi-paint shared color styles, numeric/spacing tokens, per-field typography token expressions, inset/spread/layer blur, cross-document libraries and per-node themes are outside this initial subset. Existing documents require no migration; older apps are not certified to preserve this additive metadata. Large-library performance, other browsers/OS, native x86 hardware and physical IME remain unverified. P01 covers only the AMD64 Docker smoke/storage workflow under ARM64 emulation.
+Duplicate retains document-local references. Clipboard emits detached current-theme snapshots, as for components. SVG/PNG export shows resolved styles. HTML/CSS includes variables, theme sets and static component templates (W02 below). Gradient/multi-paint shared color styles, numeric/spacing tokens, per-field typography token expressions, inset/spread/layer blur, cross-document libraries and per-node themes are outside this initial subset. Existing documents require no migration; older apps are not certified to preserve this additive metadata. Large-library performance, other browsers/OS, native x86 hardware and physical IME remain unverified. P01 covers only the AMD64 Docker smoke/storage workflow under ARM64 emulation.
 
 Validation: `npm test`, `npm run build`, `node tests/styles.e2e.mjs`, `node tests/style-renderers.e2e.mjs`. Use `STYLE_SERVER=1`, disposable owner credentials and `DRAFTROOM_URL` for authenticated persistence tests; `STYLE_REPORT`, `STYLE_SCREENSHOT` and `STYLE_PIXEL_REPORT` select artifacts.
 
@@ -460,3 +460,54 @@ Canceling a drawing gesture restores the previous scene **and selection** withou
 history or an autosave; Escape with no active gesture still clears selection. Export remains
 a static design snapshot, and creating inside a frame currently requires explicit parenting
 via a layer-panel drop. The scenario exercises absolute layout, not a responsive application.
+
+
+## CSS variables, theme sets and component markup (W02)
+
+The existing frame web preview and HTML/CSS downloads now include the document's
+color, typography and effect tokens/styles as CSS custom properties. Names use
+`--dr-token-<ID length>-<ID>` / `--dr-style-<ID length>-<ID>`; typography adds
+`--font-family`, `--font-size`, `--font-weight`, `--line-height`,
+`--letter-spacing` and `--text-align`. IDs, rather than editable display names,
+keep names stable; length prefixes prevent suffix collisions. Aliases remain
+`var(...)` references. Linked layers consume style variables; unbound overrides
+retain their local appearance. Empty effects explicitly emit `none`.
+
+The initial HTML selects the active editor theme. Change the **html** element's
+`data-dr-theme` attribute to a theme ID, or `""` for base values. For example,
+`<html lang="ko" data-dr-theme="dark">`. Each `data-dr-theme-set` section contains
+a full base-plus-theme variable set, so aliases and omitted overrides inherit
+correctly. CSS shows exactly the selected section; unknown IDs show none.
+There is no script or interactive theme picker in the export. The existing
+preview is a snapshot; close/reopen after changing the editor's theme/library.
+
+Each theme gets separately computed layout/text markup. This deliberately keeps
+auto text sizing, hug geometry, alignment and line counts consistent with the
+editor at export time. Supported Flex/Grid responsiveness remains available in
+each section under W01's rules. Manually changing typography variables does not
+rerun the editor's line breaking or intrinsic solver. Export size grows with the
+number of themes; font bytes are embedded only once. General dynamic text reflow,
+DOM glyph/baseline pixel equality and arbitrary CSS variable edits are unsupported.
+
+Component source and instance roots share a generated `data-dr-component` class
+marker. Equal appearance declarations share `dr-*-appearance-*` classes while
+placement remains instance-local. Every visible expanded source/instance root
+also emits an inert `<template id="...-template" data-dr-component="...">` with
+its reusable subtree; cloning its `content` into the **same theme section** uses
+the matching stylesheet and variables. Templates preserve that occurrence's
+content, variant selection and overrides, including nested expanded components.
+They are static markup snapshots, with original placement and box dimensions.
+Callers can replace placement classes for their integration. There are no React/Vue
+components, props/slots, runtime source synchronization, interactive variants,
+cross-document dependencies or generated semantic controls. A source outside the
+selected frame is not bundled separately; its visible instance is still reusable.
+Template/node labels are escaped and cannot add executable markup. Templates are
+inert and introduce no additional history or save operation.
+
+Validation: `tests/web-design-system.e2e.mjs` switches dark/base/alternate/dark
+in the same standalone HTML and compares computed boxes, typography/line positions,
+text color, effects and an interior solid pixel from editor SVG, plus component
+appearance reuse and template cloning. This is fixture-scoped Chromium coverage,
+not full-frame text/effect pixel certification. `tests/web-design-system-ui.e2e.mjs`
+checks real editor import/preview/download, matching CSS, three themes, one embedded
+font, no HTTP requests and unchanged authored JSON. See TESTING.md for commands.

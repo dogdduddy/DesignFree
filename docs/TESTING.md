@@ -193,3 +193,30 @@ credentials in process environment only. It removes only this project's containe
 network and volumes in `finally`; images/build cache remain. Existing browser tabs
 and personal installations are not used. The source-import geometry suite requires
 Vite; production coverage separately exercises the downloaded HTML at the same widths.
+
+
+## CSS variables, themes and reusable markup (W02)
+
+With a disposable Vite server on loopback, run:
+
+```sh
+EDITOR_URL=http://127.0.0.1:5173/ node tests/web-design-system.e2e.mjs
+DRAFTROOM_URL=http://127.0.0.1:5173/ node --import tsx tests/web-design-system-ui.e2e.mjs
+```
+
+The first suite imports synthetic source fixtures and compares theme-switch geometry,
+text lines/typography, effects, SVG interior pixels and component cloning. The second
+uses actual JSON import, preview and HTML/CSS download controls and confirms no
+source mutation. Its synthetic fixture is authored through the normal component API;
+`tsx` is needed for that test fixture, not by exported HTML.
+
+Run `node tests/web-design-system-server.mjs` for production/PostgreSQL coverage.
+It owns only `designfree-test-w02` on `127.0.0.1:43188`, refuses existing project
+resources and occupied ports, pins `compose.yaml`, ignores personal `.env` and
+implicit overrides, and generates owner/database credentials only in environment.
+It runs the W02 UI suite followed by existing web-export, auth and server-storage
+regressions and removes only that project's containers/network/volumes in `finally`.
+Images/build cache remain. The source-import geometry suite requires Vite separately.
+Artifacts stay in ignored `test-results/w02-*`; no personal installation or open
+browser tabs are used. Full text/effect raster parity and other browsers remain
+unverified. Existing responsive and style-renderer suites are separate regressions.
