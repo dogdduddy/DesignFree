@@ -19,6 +19,11 @@ import { validGrid } from "../grid-layout";
 import { normalizeTextBounds, type MeasureText } from "../text-layout";
 import { ownedJSON } from "../owned-json";
 import { validVectorPath, type VectorPath } from "../vector-path";
+import {
+  pruneInteractions,
+  validInteractions,
+  type Interaction,
+} from "../prototype";
 import type { Layout } from "../flex-layout";
 export type { Layout } from "../flex-layout";
 /** Serializable authoring model. Layout meaning stays separate from render geometry. */
@@ -85,6 +90,10 @@ export type SceneNode = {
   assetId?: string;
   /** Vector outline of a path node, scaled from its authored box to width/height. */
   path?: VectorPath;
+  /** Prototype click links to other screens (top-level frames) of the page. */
+  interactions?: Interaction[];
+  /** Pages only: the screen a prototype preview starts from. */
+  prototypeStartId?: string;
   layout: Layout;
 };
 export type ImageAsset = {
@@ -484,6 +493,16 @@ export function validateDocument(
       fail();
     if (n.type === "text" && !n.text) fail();
     if (
+      n.interactions !== undefined &&
+      (n.type === "page" || !validInteractions(n.interactions))
+    )
+      fail();
+    if (
+      n.prototypeStartId !== undefined &&
+      (n.type !== "page" || !str(n.prototypeStartId))
+    )
+      fail();
+    if (
       (n.path !== undefined || n.type === "path") &&
       (n.type !== "path" || !validVectorPath(n.path))
     )
@@ -808,6 +827,16 @@ export function duplicateNodes(
     created.push(newId);
   }
   remapComponents(next, identityMap);
+  // Links between copied screens follow the copies, as in Figma.
+  for (const id of Object.values(identityMap)) {
+    const n = next.nodes[id];
+    if (n.interactions)
+      n.interactions = n.interactions.map((i) =>
+        identityMap[i.action.destinationId]
+          ? { ...i, action: { ...i.action, destinationId: identityMap[i.action.destinationId] } }
+          : i,
+      );
+  }
   validateDocument(next);
   return { document: next, ids: created };
 }
@@ -826,6 +855,8 @@ function normalizeValidated(
   doc: SceneDocument,
   measure?: MeasureText,
 ): SceneDocument {
+  // Links to deleted or moved screens are dropped in the same commit.
+  doc = pruneInteractions(doc);
   doc = normalizeTextBounds(doc, measure);
   if (!Object.values(doc.nodes).some((n) => n.type === "group")) return doc;
   let next = doc;

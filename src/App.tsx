@@ -41,6 +41,7 @@ import {
   ImagePlus,
   PenTool,
   Shapes,
+  Play,
   Undo2,
   Redo2,
   Download,
@@ -111,6 +112,15 @@ import {
 import { serverStorage, validateLibrary } from "./server-storage";
 import { useLocalDraft } from "./use-local-draft";
 import { MAX_SVG_BYTES, browserToPng, insertSvg, parseSvg } from "./svg-import";
+import { createPortal } from "react-dom";
+import { PrototypePreview } from "./PrototypePreview";
+import {
+  DISSOLVE_DURATIONS,
+  screenOf,
+  screens,
+  startScreen,
+  type Interaction,
+} from "./prototype";
 import { CLIPBOARD_MIME, copySelection, pasteSelection } from "./clipboard";
 
 import { moveLayers, stepLayers, reparentCanvasDrop } from "./layers";
@@ -260,7 +270,8 @@ export default function App() {
     [gesturing, setGesturing] = useState(false),
     [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]),
     [marquee, setMarquee] = useState<MarqueeBox | null>(null),
-    [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+    [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
+    [previewing, setPreviewing] = useState<string | null>(null);
   const geometry = useMemo(() => computeLayout(doc), [doc]);
   const geometryRef = useRef(geometry);
   geometryRef.current = geometry;
@@ -335,6 +346,7 @@ export default function App() {
     documentEpoch.current++;
     groupScope.current = null;
     history.current = new DocumentHistory(restored);
+    setPreviewing(null);
     const normalized = history.current.document;
     docRef.current = normalized;
     selectedRef.current = [];
@@ -1686,7 +1698,7 @@ export default function App() {
   const textNode = editing ? geometry.nodes[editing] : null;
   const textMatrix = textNode ? getWorldTransform(geometry, textNode.id) : null;
   return (
-    <div className="editor-app">
+    <div className="editor-app" inert={!!previewing}>
       <header className="topbar" inert={!readyRef.current || !!webPreview}>
         <div className="brand-mark">
           <span />
@@ -1862,6 +1874,20 @@ export default function App() {
             <Redo2 size={16} />
           </button>
         </div>
+        <button
+          className="header-button"
+          aria-label="프로토타입 미리보기"
+          title={
+            screens(doc).length
+              ? "프로토타입 미리보기"
+              : "미리보기에는 페이지 최상위 프레임(화면)이 필요합니다"
+          }
+          disabled={!screens(doc).length || gesturing || !!editing}
+          onClick={() => setPreviewing(startScreen(doc, selectedRef.current))}
+        >
+          <Play size={14} />
+          <span>미리보기</span>
+        </button>
         <button
           className="header-button import-button"
           onClick={() => importInput.current?.click()}
@@ -3159,6 +3185,107 @@ export default function App() {
                   </p>
                 </section>
               )}
+              {n.type !== "page" &&
+                (() => {
+                  const screen = screenOf(doc, n.id);
+                  const link = n.interactions?.[0];
+                  const page = doc.nodes[doc.rootId];
+                  const targets = screens(doc).filter(
+                    (s) => s.id !== screen || s.id === link?.action.destinationId,
+                  );
+                  const setLink = (destinationId: string, transition: Interaction["action"]["transition"]) => {
+                    // The inspector edits the first link; others are kept.
+                    const interactions: Interaction[] = [
+                      ...(destinationId
+                        ? [{ trigger: "click", action: { type: "navigate", destinationId, transition } } as Interaction]
+                        : []),
+                      ...(n.interactions?.slice(1) ?? []),
+                    ];
+                    updateOne({ interactions: interactions.length ? interactions : undefined });
+                  };
+                  return (
+                    <section className="inspector-section prototype-section">
+                      <div className="section-title">프로토타입</div>
+                      {!screen ? (
+                        <p className="property-hint">
+                          페이지 최상위 프레임(화면) 안의 레이어만 다른 화면으로 연결할 수 있습니다.
+                        </p>
+                      ) : (
+                        <>
+                          <label className="property-hint">
+                            클릭 시 이동
+                            <select
+                              aria-label="클릭 시 이동"
+                              disabled={!editable}
+                              value={link?.action.destinationId ?? ""}
+                              onChange={(e) =>
+                                setLink(e.target.value, link?.action.transition ?? { type: "instant" })
+                              }
+                            >
+                              <option value="">없음</option>
+                              {targets.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {link && (
+                            <label className="property-hint">
+                              전환
+                              <select
+                                aria-label="전환"
+                                disabled={!editable}
+                                value={
+                                  link.action.transition.type === "dissolve"
+                                    ? String(link.action.transition.duration)
+                                    : "instant"
+                                }
+                                onChange={(e) =>
+                                  setLink(
+                                    link.action.destinationId,
+                                    e.target.value === "instant"
+                                      ? { type: "instant" }
+                                      : { type: "dissolve", duration: Number(e.target.value) },
+                                  )
+                                }
+                              >
+                                <option value="instant">즉시</option>
+                                {link.action.transition.type === "dissolve" &&
+                                  !(DISSOLVE_DURATIONS as readonly number[]).includes(link.action.transition.duration) && (
+                                    <option value={link.action.transition.duration}>
+                                      디졸브 {link.action.transition.duration}ms
+                                    </option>
+                                  )}
+                                {DISSOLVE_DURATIONS.map((d) => (
+                                  <option key={d} value={d}>
+                                    디졸브 {d}ms
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          {n.id === screen && (
+                            <label className="property-hint prototype-start">
+                              <input
+                                type="checkbox"
+                                aria-label="시작 화면"
+                                disabled={isLocked(doc, page.id)}
+                                checked={page.prototypeStartId === n.id}
+                                onChange={(e) =>
+                                  patch({
+                                    [page.id]: { prototypeStartId: e.target.checked ? n.id : undefined },
+                                  })
+                                }
+                              />
+                              미리보기 시작 화면
+                            </label>
+                          )}
+                        </>
+                      )}
+                    </section>
+                  );
+                })()}
               <section className="inspector-section">
                 <button
                   className="subtle-action danger"
@@ -3264,6 +3391,17 @@ export default function App() {
           e.target.value = "";
         }}
       />
+      {/* Outside the inert editor so only the player takes input. */}
+      {previewing &&
+        doc.nodes[previewing] &&
+        createPortal(
+          <PrototypePreview
+            doc={geometry}
+            start={previewing}
+            onClose={() => setPreviewing(null)}
+          />,
+          document.body,
+        )}
       <input
         hidden
         type="file"

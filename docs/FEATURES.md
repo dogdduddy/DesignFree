@@ -611,3 +611,36 @@ Arbitrary outlines use a new `path` node type. `node.path` stores absolute `M/L/
 `clip-path`, `mask`, `filter`, `pattern` fills (the fallback colour is used when given), markers, blend modes, `paint-order`, non-scaling strokes, `stroke-linecap`/`stroke-linejoin` (drawn butt/miter), gradient strokes (first stop colour), spread methods other than pad, radial focal points, elliptical bounding-box radial gradients (circle), skewed gradient transforms, unequal `rx`/`ry` (smaller value), zero-length dash entries, per-glyph positions and rotation, `textPath` (plain text), vertical text, `textLength`, text stroke, mixed `tspan` styles (first style), text with a font size of 0 or less (left out), nested `svg` clipping and its own percentage viewport (lengths stay relative to the root viewport), a visible child inside a hidden group (hidden, as the model inherits visibility), `image` `slice` (shown whole), images over 16,384 px per side or 40 megapixels, CSS transforms, `@media`/`@import` and other at-rules, complex CSS selectors, `foreignObject`, animation and unknown elements.
 
 External references are never fetched: images or `use` pointing to files or URLs, and `@import`, are skipped. The file is parsed as an inert XML document; scripts and event handler attributes are never run, and nothing is inserted into the editor page. An element whose converted values the document model rejects (non-finite numbers, paths larger than the model allows) is left out with a warning; the rest of the file still imports. Files over 10 MB (checked before reading), non-SVG documents and imports that would exceed the 100,000-layer limit are rejected without changing the document.
+
+## Prototyping basics (X01)
+
+A *screen* is a frame placed directly on a page. Any layer inside a screen, including the screen itself, can have one click link to another screen of the same page. Select the layer and use the inspector's **프로토타입** section:
+
+- **클릭 시 이동** chooses the destination screen (the layer's own screen is not offered) or 없음 to remove the link.
+- **전환** chooses 즉시 (instant) or 디졸브 150/300/500/800 ms (cross-fade).
+- **미리보기 시작 화면** (screens only) marks the page's start screen.
+
+Each change is one Undo step and one autosave. Locked layers show their link read-only. Layers outside a screen show a hint instead of controls.
+
+### Storage
+
+`node.interactions` (any node except pages) holds `[{ trigger: "click", action: { type: "navigate", destinationId, transition } }]`. `transition` is `{ type: "instant" }` or `{ type: "dissolve", duration }` with 0–10,000 ms; at most 8 entries, and the inspector edits the first. The page node's `prototypeStartId` names its start screen. Validation rejects other triggers, actions and fields. Links are stored in JSON, IndexedDB and the server library like other node fields, and component instances may override them like other properties.
+
+A link is removed in the same commit as the change that invalidates it: its destination stops being a screen on the source's page (deleted, nested, moved to another page, layer pasted into another document), or its source layer moves out of every screen. Undo restores both. A start screen that stops being a screen of its page is cleared the same way. Duplicating or pasting several screens together (Cmd+D, Option-drag, paste) points links between them at the copies; links to screens outside the copied set keep their original destination. Renderers, SVG/PNG export and HTML/CSS export ignore links.
+
+### Preview
+
+**미리보기** in the header opens a full-window player. It starts at the page's start screen; without one, at the screen containing the selection; otherwise at the first screen. Each screen is drawn alone with the SVG renderer from computed layout, scaled down to fit (never enlarged).
+
+- A click targets the deepest visible layer under the pointer, with the screen acting as the viewport. Locks do not apply. The nearest layer up to the screen with a link handles the click, so links on groups or frames cover their contents. The pointer turns into a hand over linked areas.
+- Clicking where nothing is linked briefly outlines the clickable areas.
+- Instant switches at once. Dissolve fades the new screen in over the old one for the chosen duration.
+- **이전 화면** goes back through visited screens (always instantly), **처음 화면** returns to the start, and Esc or **미리보기 닫기** closes the player.
+
+While the player is open the editor is `inert`: its shortcuts, pointer input and keyboard focus are unavailable, so the preview cannot change the document, history, autosave or selection. If the shown screen disappears (for example after draft recovery) the player falls back to the start screen or closes, and restoring a document closes it. It is disabled when the page has no screen and during gestures or text editing.
+
+Hit testing uses each layer's box: rounded clip corners, path outlines and empty space inside a group's bounds (which include hidden children) are clickable, and hotspot outlines are axis-aligned boxes that may include fully clipped layers. A click during a dissolve starts the next transition immediately, so the fading screen jumps to full opacity.
+
+### Not included
+
+Instance overrides are not pruned: an overridden link to a deleted screen stays in the override (inactive) and keeps hiding the main component's link until the override is reset. Other triggers (hover, drag, key, timers), overlays, scrolling and fixed areas, smart animate, slide/push transitions, cross-page flows, multiple flows, back actions as links, link arrows on the canvas, device frames, presentation sharing and comments.

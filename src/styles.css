@@ -1667,3 +1667,76 @@ svg {
 .style-visual-editor [role="alert"] {
   color: #a12c38;
 }
+.prototype-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: #1f1d26;
+  color: #eceaf2;
+}
+.prototype-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #34313f;
+}
+.prototype-bar strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.prototype-bar span {
+  flex: 1;
+  font-size: 10px;
+  color: #9f99ad;
+}
+.prototype-bar button {
+  display: flex;
+  border: 1px solid #3d3949;
+  border-radius: 5px;
+  padding: 6px;
+  color: inherit;
+  background: #2a2733;
+}
+.prototype-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.prototype-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.prototype-screen {
+  grid-area: 1 / 1;
+  background: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.prototype-screen.entering {
+  animation-name: prototype-dissolve;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes prototype-dissolve {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.prototype-hotspot {
+  fill: rgba(80, 140, 255, 0.18);
+  stroke: #3d7bff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.prototype-start {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

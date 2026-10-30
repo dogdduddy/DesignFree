@@ -29,10 +29,12 @@ const n = (x: number) => (Number.isFinite(x) ? x : 0);
 export function sceneMarkup(
   doc: SceneDocument,
   excluded?: ReadonlySet<string>,
+  /** Definition id prefix; markup shown beside the canvas needs its own. */
+  prefix = "n",
 ): string {
   doc = resolveDocumentStyles(doc);
   const defs: string[] = [];
-  const keys = new Map(Object.keys(doc.nodes).map((id, i) => [id, `n-${i}`]));
+  const keys = new Map(Object.keys(doc.nodes).map((id, i) => [id, `${prefix}-${i}`]));
   function visit(id: string): string {
     const node = doc.nodes[id];
     if (!node || !node.visible || excluded?.has(id)) return "";

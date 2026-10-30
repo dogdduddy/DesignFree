@@ -130,6 +130,7 @@ export function validComponent(value: unknown, node: SceneNode): boolean {
     "layout",
     "styleRefs",
     "effects",
+    "interactions",
   ]);
   const unsafe = new Set(["__proto__", "constructor", "prototype"]);
   if (value.variantOverrides !== undefined) {

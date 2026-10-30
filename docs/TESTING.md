@@ -290,3 +290,16 @@ With Vite running, `EDITOR_URL=http://127.0.0.1:5173/ node tests/svg-import.e2e.
 - In the editor, toolbar upload creates one selected frame, Undo/Redo treat the import as one step, autosave reload keeps it, and CanvasKit renders it without a renderer error.
 
 Artifacts go to ignored `test-results/i01-*`. `tests/vector-path.test.ts` covers path parsing, bounds, validation, scaling, SVG/HTML export and SVG value parsing.
+
+## Prototyping (X01)
+
+With Vite running, `DRAFTROOM_URL=http://127.0.0.1:5173/ node tests/prototype.e2e.mjs` imports a three-screen fixture through the normal JSON import, then:
+
+- Authors links, a dissolve transition and the start screen in the inspector, counting exactly one save per change. Undo/Redo step through each change.
+- Plays the preview: start screen precedence, a click on a group's label bubbling to the group's link, dissolve keeping the old screen until the fade ends, instant switching, a locked layer's link, back navigation, the hotspot hint on a miss, sampled screen pixels (background and button fill), an inert editor (Delete has no effect; Shift+Tab focus never leaves the player). It then checks that the document, save count and Undo state are unchanged.
+- Deletes a destination screen, checks that links to it are pruned in the same step, and that one Undo restores both.
+- Reloads from autosave, re-imports the exported JSON, and checks that a link with an unsupported trigger is rejected.
+
+`node tests/prototype-server.mjs` runs the same script with `PROTOTYPE_SERVER=1` against a disposable `designfree-test-x01` Compose project on `127.0.0.1:43198`. That run additionally compares the server's stored library, then runs the auth and server-storage regressions. It refuses existing project resources or an occupied port, pins `compose.yaml`, ignores `.env` and Compose overrides, generates owner/database credentials only in process environment, and removes only its own containers, network and volumes in `finally`.
+
+`tests/prototype.test.ts` covers validation (including no links on pages), screens and start screen, pruning (deletion, nesting, other pages, sources outside screens, idempotence, same-commit Undo), link remapping on duplication, preview hit testing (hidden, clipped, locked, bubbling, own-screen links), hotspots, instance overrides and export exclusion.
