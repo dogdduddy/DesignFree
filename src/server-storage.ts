@@ -1,4 +1,4 @@
-import { parseDocument, serializeDocument, type SceneDocument } from "./core";
+import { snapshotDocument, type SceneDocument } from "./core";
 import { DraftConflictError, type StoredDraft } from "./local-draft-storage";
 import { ServerOutbox } from "./server-outbox";
 
@@ -20,10 +20,8 @@ export function validateLibrary(value: unknown): Library {
   if (!value || typeof value !== "object") throw new Error("Invalid library");
   const raw = value as Library;
   if (!Array.isArray(raw.documents)) throw new Error("Missing documents");
-  const document = parseDocument(serializeDocument(raw.document));
-  const documents = raw.documents.map((d) =>
-    parseDocument(serializeDocument(d)),
-  );
+  const document = snapshotDocument(raw.document);
+  const documents = raw.documents.map(snapshotDocument);
   const ids = [document.id, ...documents.map((d) => d.id)];
   if (new Set(ids).size !== ids.length)
     throw new Error("Duplicate document identity");

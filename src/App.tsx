@@ -235,7 +235,8 @@ export default function App() {
   const [history] = useState(() => ({
     current: new DocumentHistory(createDemoDocument()),
   }));
-  const [doc, setDoc] = useState<SceneDocument>(() => history.current.document),
+  const [initialDocument] = useState(() => history.current.document);
+  const [doc, setDoc] = useState<SceneDocument>(initialDocument),
     [selected, setSelected] = useState<string[]>([]),
     [tool, setTool] = useState<Tool>("select"),
     [viewport, setViewport] = useState<Viewport>({ x: 70, y: 70, zoom: 0.75 }),
@@ -289,6 +290,10 @@ export default function App() {
     const element = layerTree.current;
     if (!element || index < 0) return;
     const y = index * LAYER_ROW_HEIGHT;
+    // The tracked scroll offset and height avoid reading layout (a forced reflow
+    // of the whole editor) when the row is already visible, as after most edits.
+    if (y >= layerScroll && y + LAYER_ROW_HEIGHT <= layerScroll + layerHeight)
+      return;
     if (y < element.scrollTop) element.scrollTop = y;
     else if (y + LAYER_ROW_HEIGHT > element.scrollTop + element.clientHeight)
       element.scrollTop = y + LAYER_ROW_HEIGHT - element.clientHeight;
@@ -341,7 +346,7 @@ export default function App() {
     didFit.current = false;
   };
   const localDraft = useLocalDraft(
-    history.current.document,
+    initialDocument,
     restoreDocument,
     uncommitted,
   );
@@ -391,12 +396,22 @@ export default function App() {
       };
     }
   }, []);
+  // Autosave compares the committed document. Gesture previews leave it
+  // unchanged, so they skip that whole-library comparison and copy.
+  const observed = useRef<{ history: DocumentHistory; revision: number }>(null);
   const sync = () => {
     const next = history.current.document;
     const pageChanged = next.rootId !== docRef.current.rootId;
+    const kept = selectedRef.current.filter((id) => Boolean(next.nodes[id]));
+    // Gesture previews keep the array identity when nothing was removed, so
+    // selection effects (layer reveal reads layout) do not rerun on every step.
+    // Commits, Undo and Redo still pass a new array, as before.
     const nextSelection = pageChanged
       ? []
-      : selectedRef.current.filter((id) => Boolean(next.nodes[id]));
+      : history.current.transactionActive &&
+          kept.length === selectedRef.current.length
+        ? selectedRef.current
+        : kept;
     if (pageChanged) {
       documentEpoch.current++;
       groupScope.current = null;
@@ -410,7 +425,18 @@ export default function App() {
     setDoc(next);
     setSelected(nextSelection);
     setEditing((id) => (id && next.nodes[id] ? id : null));
-    localDraft.observe(history.current.committedDocument);
+    const revision = history.current.committedRevision;
+    if (
+      observed.current?.history !== history.current ||
+      observed.current.revision !== revision
+    ) {
+      const accepted = localDraft.observe(
+        history.current.transactionActive
+          ? history.current.committedDocument
+          : next,
+      );
+      if (accepted) observed.current = { history: history.current, revision };
+    }
   };
   const execute = (next: SceneDocument) => {
     if (!readyRef.current) return;

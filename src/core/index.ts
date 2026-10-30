@@ -17,6 +17,7 @@ import {
 } from "../components";
 import { validGrid } from "../grid-layout";
 import { normalizeTextBounds, type MeasureText } from "../text-layout";
+import { ownedJSON } from "../owned-json";
 import type { Layout } from "../flex-layout";
 export type { Layout } from "../flex-layout";
 /** Serializable authoring model. Layout meaning stays separate from render geometry. */
@@ -199,17 +200,20 @@ export function hitTest(
   }
   return visit(doc.rootId);
 }
+/** Changed nodes are fresh copies; unchanged nodes and document metadata are
+ * shared with the input. Treat both documents as read-only afterwards. */
 export function updateNodes(
   doc: SceneDocument,
   changes: Record<string, Partial<SceneNode>>,
 ): SceneDocument {
-  const next = clone(doc);
+  const next: SceneDocument = { ...doc, nodes: { ...doc.nodes } };
   for (const [id, change] of Object.entries(changes)) {
     if (!Object.hasOwn(next.nodes, id)) throw new Error("Unknown node");
-    next.nodes[id] = { ...next.nodes[id], ...clone(change) };
+    next.nodes[id] = { ...clone(doc.nodes[id]), ...clone(change) };
   }
   const normalized = normalizeGroupBounds(next);
-  validateDocument(normalized);
+  // normalizeGroupBounds validated its input; only a changed result needs a check.
+  if (normalized !== next) validateDocument(normalized);
   return normalized;
 }
 export function reparentNode(
@@ -514,11 +518,20 @@ export function serializeDocument(doc: SceneDocument): string {
   validateDocument(doc);
   return JSON.stringify(doc);
 }
+const MAX_DOCUMENT_JSON = 50_000_000;
+/** Detached copy of a valid document. A JSON round trip of a validated document
+ * stays valid, so the copy is not validated a second time. */
+export function snapshotDocument(doc: SceneDocument): SceneDocument {
+  const json = serializeDocument(doc);
+  if (json.length > MAX_DOCUMENT_JSON) throw new Error("Document too large");
+  return JSON.parse(json);
+}
 export function parseDocument(json: string): SceneDocument {
-  if (json.length > 50_000_000) throw new Error("Document too large");
+  if (json.length > MAX_DOCUMENT_JSON) throw new Error("Document too large");
   const doc: unknown = JSON.parse(json);
   validateDocument(doc);
-  return clone(doc);
+  // JSON.parse already owns a new object graph; validation does not mutate it.
+  return doc;
 }
 /** Node/asset reversible patches. Documents returned at the boundary stay detached. */
 type HistoryPatch = {
@@ -533,6 +546,7 @@ export class DocumentHistory {
   private past: HistoryPatch[] = [];
   private future: HistoryPatch[] = [];
   private start: SceneDocument | null = null;
+  private revision = 0;
   /** Serialized UTF-8 patch budget, not an estimate of browser heap bytes. */
   constructor(
     doc: SceneDocument,
@@ -550,6 +564,13 @@ export class DocumentHistory {
   /** Recovery snapshots exclude tentative gesture previews. */
   get committedDocument() {
     return clone(this.start ?? this.current);
+  }
+  /** Changes whenever the committed document may have changed; previews do not. */
+  get committedRevision() {
+    return this.revision;
+  }
+  get transactionActive() {
+    return this.start !== null;
   }
   get canUndo() {
     return this.past.length > 0;
@@ -578,19 +599,30 @@ export class DocumentHistory {
   preview(next: SceneDocument, fromCurrent = false) {
     if (!this.start) throw new Error("No active transaction");
     validateDocument(next);
-    next = normalizeGroupBounds(
+    this.current = this.own(
+      next,
       reconcileComponents(next, fromCurrent ? this.current : this.start),
     );
-    validateDocument(next);
-    this.current = clone(next);
+  }
+  /** Normalize and keep a copy the caller cannot reach. A reconciled document is
+   * already a fresh deep copy, so it is not copied a second time. */
+  private own(input: SceneDocument, reconciled: SceneDocument) {
+    // The input was validated by the caller; a reconciled copy is checked here.
+    const unchanged = reconciled === input;
+    const next = unchanged
+      ? normalizeValidated(reconciled)
+      : normalizeGroupBounds(reconciled);
+    if (next !== reconciled) validateDocument(next);
+    return unchanged ? clone(next) : next;
   }
   private push(previous: SceneDocument) {
     const { nodes: oldNodes, assets: oldAssets, ...before } = previous;
     const { nodes: newNodes, assets: newAssets, ...after } = this.current;
-    function diff<T>(a: Record<string, T>, b: Record<string, T>) {
+    function diff<T extends object>(a: Record<string, T>, b: Record<string, T>) {
       const result: Record<string, [T | null, T | null]> = Object.create(null);
       for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) {
-        if (JSON.stringify(a[id]) !== JSON.stringify(b[id]))
+        // Both sides are history-owned, so each commit serializes only new nodes.
+        if (a[id] !== b[id] && ownedJSON(a[id]) !== ownedJSON(b[id]))
           result[id] = clone([a[id] ?? null, b[id] ?? null]);
       }
       return result;
@@ -603,6 +635,7 @@ export class DocumentHistory {
       JSON.stringify(before) === JSON.stringify(after)
     )
       return;
+    this.revision++;
     const patch = { before, after, nodes, assets, bytes: 0 };
     patch.bytes = new TextEncoder().encode(
       JSON.stringify({ before, after, nodes, assets }),
@@ -630,6 +663,7 @@ export class DocumentHistory {
       nodes,
       assets,
     };
+    this.revision++;
   }
   commitTransaction() {
     if (!this.start) throw new Error("No active transaction");
@@ -645,10 +679,8 @@ export class DocumentHistory {
   execute(next: SceneDocument) {
     if (this.start) throw new Error("Transaction active");
     validateDocument(next);
-    next = normalizeGroupBounds(reconcileComponents(next, this.current));
-    validateDocument(next);
     const old = this.current;
-    this.current = clone(next);
+    this.current = this.own(next, reconcileComponents(next, old));
     this.push(old);
   }
   undo() {
@@ -764,15 +796,33 @@ export function duplicateNodes(
   return { document: next, ids: created };
 }
 
-/** Tight authored child boxes in group axes, including hidden children. Never scales content. */
+/** Tight authored child boxes in group axes, including hidden children. Never scales content.
+ * Only groups and children whose boxes change are copied; everything else is
+ * shared with the input, which stays unmodified. */
 export function normalizeGroupBounds(
   doc: SceneDocument,
   measure?: MeasureText,
 ): SceneDocument {
   validateDocument(doc);
+  return normalizeValidated(doc, measure);
+}
+function normalizeValidated(
+  doc: SceneDocument,
+  measure?: MeasureText,
+): SceneDocument {
   doc = normalizeTextBounds(doc, measure);
   if (!Object.values(doc.nodes).some((n) => n.type === "group")) return doc;
-  const next = clone(doc);
+  let next = doc;
+  const copied = new Set<string>();
+  const writable = (id: string) => {
+    if (next === doc) next = { ...doc, nodes: { ...doc.nodes } };
+    if (!copied.has(id)) {
+      copied.add(id);
+      const n = next.nodes[id];
+      next.nodes[id] = { ...n, transform: [...n.transform] as Matrix };
+    }
+    return next.nodes[id];
+  };
   function visit(id: string) {
     const n = next.nodes[id];
     n.children.forEach(visit);
@@ -802,13 +852,19 @@ export function normalizeGroupBounds(
     );
     const x = points.length ? box.x : 0,
       y = points.length ? box.y : 0;
-    n.width = points.length ? box.right - x : 0;
-    n.height = points.length ? box.bottom - y : 0;
-    if (Math.abs(x) < 1e-10 && Math.abs(y) < 1e-10) return;
-    n.transform = multiplyMatrices(n.transform, [1, 0, 0, 1, x, y]);
+    const width = points.length ? box.right - x : 0,
+      height = points.length ? box.bottom - y : 0;
+    const moved = Math.abs(x) >= 1e-10 || Math.abs(y) >= 1e-10;
+    if (!moved && width === n.width && height === n.height) return;
+    const group = writable(id);
+    group.width = width;
+    group.height = height;
+    if (!moved) return;
+    group.transform = multiplyMatrices(group.transform, [1, 0, 0, 1, x, y]);
     for (const child of n.children) {
-      next.nodes[child].transform[4] -= x;
-      next.nodes[child].transform[5] -= y;
+      const c = writable(child);
+      c.transform[4] -= x;
+      c.transform[5] -= y;
     }
   }
   (next.pageIds ?? [next.rootId]).forEach(visit);

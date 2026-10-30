@@ -1,4 +1,4 @@
-import { parseDocument, serializeDocument, type SceneDocument } from "./core";
+import { snapshotDocument, type SceneDocument } from "./core";
 
 export const DRAFT_DB_NAME = "draftroom-local-drafts";
 export const DRAFT_STORE_NAME = "drafts";
@@ -21,9 +21,7 @@ export class DraftConflictError extends Error {
   }
 }
 
-function snapshot(document: SceneDocument): SceneDocument {
-  return parseDocument(serializeDocument(document));
-}
+const snapshot = snapshotDocument;
 
 function validateStored(value: unknown): StoredDraft {
   if (!value || typeof value !== "object")
@@ -223,13 +221,19 @@ export async function saveLocalDraft(
           throw new Error("Local draft revision limit reached");
         const inactive =
           library ?? current?.documents?.filter((d) => d.id !== copy.id);
-        const next: StoredDraft = validateStored({
+        // copy/library were validated and detached before yielding; readStored
+        // did the same for inherited inactive documents. Do not JSON-roundtrip
+        // the entire library a second time inside the write transaction.
+        const ids = [copy.id, ...(inactive ?? []).map((d) => d.id)];
+        if (new Set(ids).size !== ids.length)
+          throw new Error("Duplicate document identity");
+        const next: StoredDraft = {
           version: inactive ? 2 : 1,
           ...(inactive ? { documents: inactive } : {}),
           revision,
           updatedAt: new Date().toISOString(),
           document: copy,
-        });
+        };
         const write = store.put(next, DRAFT_KEY);
         write.onerror = () => fail(write.error);
         write.onsuccess = () => result(next);

@@ -35,7 +35,16 @@ export class LocalDraftSession {
   saved = "";
   latest = "";
   document?: SceneDocument;
-  documents: SceneDocument[] = [];
+  private library: SceneDocument[] = [];
+  private libraryJSON = "[]";
+  /** Inactive documents. Replace the array instead of editing it in place. */
+  get documents() {
+    return this.library;
+  }
+  set documents(documents: SceneDocument[]) {
+    this.library = documents;
+    this.libraryJSON = JSON.stringify(documents);
+  }
   timer?: ReturnType<typeof setTimeout>;
   writing = false;
   blocked = false;
@@ -83,7 +92,9 @@ export class LocalDraftSession {
       }));
   }
   key(document: SceneDocument) {
-    return JSON.stringify({ document, documents: this.documents });
+    // Same text as JSON.stringify({ document, documents }); the inactive
+    // library is serialized once when it changes, not on every edit.
+    return `{"document":${JSON.stringify(document)},"documents":${this.libraryJSON}}`;
   }
   change = (document: SceneDocument, documents: SceneDocument[]) => {
     if (!this.state.ready || this.blocked || this.state.status === "error")
@@ -94,12 +105,14 @@ export class LocalDraftSession {
     this.schedule();
     return true;
   };
-  observe = (document: SceneDocument) => {
-    if (!this.state.ready) return;
+  /** Takes a detached committed document; the caller must not edit it later.
+   * Returns false when not ready, so the caller observes it again later. */
+  observe = (document: SceneDocument): boolean => {
+    if (!this.state.ready) return false;
     const key = this.key(document);
-    if (key === this.latest) return;
+    if (key === this.latest) return true;
     this.latest = key;
-    this.document = structuredClone(document);
+    this.document = document;
     if (this.blocked || this.state.status === "error") {
       if (this.storage) {
         this.staging = this.storage.stage(
@@ -116,9 +129,10 @@ export class LocalDraftSession {
           ),
         );
       }
-      return;
+      return true;
     }
     this.schedule();
+    return true;
   };
   schedule() {
     clearTimeout(this.timer);

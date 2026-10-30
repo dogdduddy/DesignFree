@@ -250,3 +250,30 @@ regressions sequentially, then removes only its disposable containers/network/vo
 `finally`. Images/build cache remain. Artifacts stay under ignored `test-results/`.
 No personal installation, document library or existing browser tab is used.
 Physical IME, other browser engines, large-library performance and native x86 are unverified.
+
+## Large-document input, save and memory (P02)
+
+`tests/p02-performance.e2e.mjs` imports four generated fixtures through the normal JSON
+import into a fresh browser context and IndexedDB library: mixed 1,000 and 10,000 nodes,
+10,000 nodes whose containers are groups, and 2,000 nodes plus one 41-node main component
+with 100 expanded instances (6,141 nodes). Each fixture's SHA-256 fingerprint is reported so
+two builds can be compared on identical input. Per fixture it measures hover moves, one
+21-step Meta-drag committed once, and 21 arrow-key nudges (one history step and autosave each):
+native capture-to-two-RAF latency (3 warmups, 18 samples), CDP script and layout/style time,
+input end to `saved` (includes the 200 ms debounce), JS heap after forced GC on import, after
+edits and with CanvasKit, and CanvasKit WebAssembly linear memory. It also checks one-step
+drag Undo/Redo, the exact nudge distance and autosave reload.
+
+`EDITOR_URL` must be a Vite dev server (fixtures are generated from source); `DRAFTROOM_URL`
+is the editor under test, for example a production preview. `P02_LABEL` names the report
+`test-results/p02-<label>.json`; `P02_FIXTURES` selects fixtures by name.
+
+```sh
+npm run dev -- --port 5173 &
+npx vite build && npx vite preview --host 127.0.0.1 --port 4173 &
+EDITOR_URL=http://127.0.0.1:5173/ DRAFTROOM_URL=http://127.0.0.1:4173/ P02_LABEL=after node tests/p02-performance.e2e.mjs
+```
+
+To compare against an earlier commit, serve a production build of that commit on another
+port and run the same command with a different label. Timing depends on machine load;
+compare runs from the same machine and session, and repeat each build at least twice.

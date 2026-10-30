@@ -230,6 +230,25 @@ The first script measures the same exact 1,000/10,000-node mixed fixtures on SVG
 
 Regenerate measurements with the scripts above; private historical benchmark reports are not distributed.
 
+### Fewer whole-document copies per edit (P02)
+
+Profiling a 10,000-node production build showed that most per-edit CPU went to repeated whole-document `structuredClone`, validation and serialization, plus a forced layout. These paths changed without changing editing semantics:
+
+- The editor no longer deep-copies the document on every React render (hover, pointer moves).
+- Gesture previews leave the committed document unchanged, so autosave skips its whole-library comparison and copy until an actual commit, Undo or Redo (`DocumentHistory.committedRevision`).
+- Gesture previews keep the selection array when nothing was removed, so the layer-reveal effect no longer forces layout on every drag step. Commits, Undo and Redo reveal the selection as before; the reveal uses the tracked scroll offset and panel height and reads layout only when the row is actually outside the visible window.
+- `updateNodes` and group-bound normalization copy only the nodes they change and share the rest with their input; both documents are treated as read-only. History keeps owning its documents: a reconciled document is already a fresh copy, other inputs are copied once.
+- Commit diffs reuse the cached JSON of the previous history-owned nodes instead of serializing both sides, roughly halving that work. The cache is keyed by object identity because history never mutates what it owns; it keeps about one JSON copy of the current and transaction-base nodes alive.
+- A document that was just validated and comes back unchanged is not validated again. Storage snapshots validate once before their JSON round trip (`snapshotDocument`).
+- Instance resolution serializes each source node once per pass and parses a copy per materialized node; the override capture skips mapped nodes identical to the previous history-owned node.
+- Autosave serializes the inactive library once when it changes, not on every commit.
+
+Public `document` / `committedDocument` reads stay detached copies, a gesture still commits once, cancel restores the prior scene and no-ops add no history or save.
+
+Remaining O(N) work per committed edit: one defensive copy into history for non-component documents, one detached copy for React state, one or two validations, layout computation, SVG markup regeneration and the autosave JSON round trip plus IndexedDB write. SVG regeneration and layout are now the largest per-edit costs at 10,000 nodes. Instance resolution still re-materializes every instance subtree on each commit.
+
+`tests/p02-performance.e2e.mjs` measures these paths through the real UI; see docs/TESTING.md.
+
 ## Local documents and pages (F01)
 
 Open **문서 목록** to select, create, rename, duplicate or delete browser-local documents. A new document is blank. Duplication keeps every page and owned image, with a new document identity; layer and asset IDs are scoped to their document. Deletion asks for confirmation and cannot be undone; deleting the final document creates a blank replacement. Rename commits on the form button/Enter and accepts 1–200 trimmed characters. JSON import retains the earlier **replace current document** behavior, preserving other library entries; an imported ID colliding with an inactive document receives a new identity. JSON download backs up the current document including all pages, not the whole library. SVG/PNG export includes the active page only.

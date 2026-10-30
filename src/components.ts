@@ -1,4 +1,5 @@
 import type { SceneDocument, SceneNode } from "./core";
+import { ownedJSON } from "./owned-json";
 
 /** Expanded scene snapshots keep renderers/layout independent of component semantics. */
 export type Variant = {
@@ -44,7 +45,13 @@ export function instanceOwner(
   }
 }
 function subtree(doc: SceneDocument, id: string): string[] {
-  return [id, ...doc.nodes[id].children.flatMap((c) => subtree(doc, c))];
+  const result: string[] = [];
+  const visit = (nodeId: string) => {
+    result.push(nodeId);
+    for (const child of doc.nodes[nodeId].children) visit(child);
+  };
+  visit(id);
+  return result;
 }
 function leafDiff(
   before: unknown,
@@ -176,7 +183,8 @@ export function validComponent(value: unknown, node: SceneNode): boolean {
 }
 
 /** Run once at the history boundary: direct changes become overrides, then sources propagate.
- * No renderer or computed-layout result ever writes overrides. */
+ * No renderer or computed-layout result ever writes overrides. `previous` must be
+ * a history-owned document that is never edited afterwards. */
 export function reconcileComponents(
   input: SceneDocument,
   previous?: SceneDocument,
@@ -225,6 +233,9 @@ export function reconcileComponents(
       for (const [sourceId, id] of Object.entries(old.nodeMap)) {
         const before = previous.nodes[id],
           after = doc.nodes[id];
+        // An identical node has no structural change and no direct edit to capture.
+        if (before && after && ownedJSON(before) === JSON.stringify(after))
+          continue;
         if (
           !before ||
           !after ||
@@ -267,6 +278,11 @@ export function reconcileComponents(
       delete n.component;
   }
   let nodeCount = Object.keys(doc.nodes).length;
+  // A source is stable after resolve(sourceId). Reuse its preorder and node JSON
+  // within this reconciliation only; never retain them across source edits or
+  // variant switches. Each materialized node parses its own deep copy.
+  const sourceSubtrees = new Map<string, string[]>();
+  const sourceJSON = new Map<string, string>();
   const resolving = new Set<string>(),
     resolved = new Set<string>();
   const resolve = (id: string, depth = 0) => {
@@ -286,7 +302,11 @@ export function reconcileComponents(
     }
     if (link?.kind === "instance") {
       resolve(link.sourceId, depth + 1);
-      const sourceIds = subtree(doc, link.sourceId);
+      let sourceIds = sourceSubtrees.get(link.sourceId);
+      if (!sourceIds) {
+        sourceIds = subtree(doc, link.sourceId);
+        sourceSubtrees.set(link.sourceId, sourceIds);
+      }
       const oldIds = new Set(Object.values(link.nodeMap));
       const nextMap: Record<string, string> = Object.create(null);
       for (const sid of sourceIds)
@@ -306,7 +326,10 @@ export function reconcileComponents(
         error("컴포넌트 확장으로 문서 레이어 제한을 초과합니다.");
       for (const oldId of oldIds) if (!keep.has(oldId)) delete doc.nodes[oldId];
       for (const sid of sourceIds) {
-        const n = clone(doc.nodes[sid]);
+        let text = sourceJSON.get(sid);
+        if (text === undefined)
+          sourceJSON.set(sid, (text = JSON.stringify(doc.nodes[sid])));
+        const n: SceneNode = JSON.parse(text);
         n.id = nextMap[sid];
         n.parentId =
           sid === link.sourceId ? root.parentId : nextMap[n.parentId!];
