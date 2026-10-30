@@ -18,6 +18,7 @@ import {
 import { validGrid } from "../grid-layout";
 import { normalizeTextBounds, type MeasureText } from "../text-layout";
 import { ownedJSON } from "../owned-json";
+import { validVectorPath, type VectorPath } from "../vector-path";
 import type { Layout } from "../flex-layout";
 export type { Layout } from "../flex-layout";
 /** Serializable authoring model. Layout meaning stays separate from render geometry. */
@@ -36,7 +37,14 @@ export type Paint = (
   | { type: "none" }
 ) & { opacity?: number };
 export type NodeType =
-  "page" | "frame" | "group" | "rectangle" | "ellipse" | "text" | "image";
+  | "page"
+  | "frame"
+  | "group"
+  | "rectangle"
+  | "ellipse"
+  | "path"
+  | "text"
+  | "image";
 export type SceneNode = {
   id: string;
   component?: Component;
@@ -75,6 +83,8 @@ export type SceneNode = {
     sizing?: "fixed" | "auto-width" | "auto-height";
   };
   assetId?: string;
+  /** Vector outline of a path node, scaled from its authored box to width/height. */
+  path?: VectorPath;
   layout: Layout;
 };
 export type ImageAsset = {
@@ -397,6 +407,7 @@ export function validateDocument(
         "group",
         "rectangle",
         "ellipse",
+        "path",
         "text",
         "image",
       ].includes(n.type) ||
@@ -472,6 +483,11 @@ export function validateDocument(
     )
       fail();
     if (n.type === "text" && !n.text) fail();
+    if (
+      (n.path !== undefined || n.type === "path") &&
+      (n.type !== "path" || !validVectorPath(n.path))
+    )
+      fail();
     if (
       n.assetId !== undefined &&
       (!str(n.assetId) || !Object.hasOwn(d.assets, n.assetId))

@@ -1,6 +1,6 @@
 # DesignFree
 
-Figma-style open-source design editor for personal Docker hosting. The UI currently uses the Draftroom name. React/TypeScript with SVG and CanvasKit rendering, absolute/Flex/Grid layout subsets, component instances/variants and shared styles/tokens/themes. MIT licensed; no Figma code or assets are included.
+Figma-style open-source design editor for personal Docker hosting. The UI currently uses the Draftroom name. React/TypeScript with SVG and CanvasKit rendering, absolute/Flex/Grid layout subsets, component instances/variants, shared styles/tokens/themes and SVG import into editable vector paths. MIT licensed; no Figma code or assets are included.
 
 ## 처음 설치하는 분: Mac 복사·붙여넣기
 

@@ -24,6 +24,7 @@ import {
   strokePathData,
 } from "../paints";
 import { configureFill } from "./paint";
+import { nodePathData } from "../vector-path";
 let kitPromise: Promise<CanvasKit> | undefined;
 export const loadCanvasKit = () =>
   (kitPromise ??= CanvasKitInit({ locateFile: () => wasmUrl }));
@@ -33,6 +34,8 @@ type Resource = {
   dash?: { delete(): void };
   stroke?: Paint;
   strokePath?: import("canvaskit-wasm").Path;
+  /** Outline of a path node, shared by fills, stroke and stroke clipping. */
+  path?: import("canvaskit-wasm").Path;
   mask?: {
     image: SkImage;
     left: number;
@@ -107,6 +110,7 @@ export async function createCanvasKitEngine(
     r.dash?.delete();
     r.stroke?.delete();
     r.strokePath?.delete();
+    r.path?.delete();
     r.mask?.image.delete();
     r.image?.delete();
     r.layer.delete();
@@ -130,6 +134,7 @@ export async function createCanvasKitEngine(
       node.effects,
       node.width,
       node.height,
+      node.path,
       asset?.dataUrl,
     ]);
     const old = resources.get(node.id);
@@ -156,6 +161,11 @@ export async function createCanvasKitEngine(
           r.filters.push(filter);
         }
         layer.setImageFilter(r.filters.at(-1)!);
+      }
+      if (node.type === "path") {
+        r.path = ck.Path.MakeFromSVGString(nodePathData(node)) ?? undefined;
+        if (node.path?.fillRule === "evenodd")
+          r.path?.setFillType(ck.FillType.EvenOdd);
       }
       for (const fill of node.type === "text" ? [] : nodeFills(node)) {
         const paint = new ck.Paint();
@@ -229,7 +239,9 @@ export async function createCanvasKitEngine(
           if (paint === r.stroke && r.strokePath)
             canvas.drawPath(r.strokePath, paint);
           else if (node.type === "ellipse") canvas.drawOval(rect, paint);
-          else if (node.type !== "group") canvas.drawRRect(rr, paint);
+          else if (node.type === "path") {
+            if (r.path) canvas.drawPath(r.path, paint);
+          } else if (node.type !== "group") canvas.drawRRect(rr, paint);
         };
         if (r.mask) {
           const m = r.mask;
@@ -266,7 +278,16 @@ export async function createCanvasKitEngine(
           canvas.save();
           try {
             const position = strokePosition(node);
-            if (position !== "center") {
+            if (position !== "center" && node.type === "path") {
+              if (r.path)
+                canvas.clipPath(
+                  r.path,
+                  position === "inside"
+                    ? ck.ClipOp.Intersect
+                    : ck.ClipOp.Difference,
+                  true,
+                );
+            } else if (position !== "center") {
               const builder = new ck.PathBuilder();
               if (node.type === "ellipse") builder.addOval(rect);
               else builder.addRRect(rr);

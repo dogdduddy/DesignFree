@@ -585,3 +585,29 @@ This is explicit snapshot distribution within one owner's document library, with
 cross-document synchronization, remote library URLs, permissions or version subscriptions.
 Only the source's selected theme is pinned; other source themes are not merged into consumers.
 Large-library performance and other browser engines/OS remain unverified.
+
+## SVG import and path nodes (I01)
+
+The toolbar's **SVG 가져오기** button converts an SVG file into editable nodes inside a new frame at the centre of the view. The frame takes the file name and the SVG viewport size, clips its content and has no fill. Import is one Undo step and one autosave; the frame is selected afterwards. A summary message lists what was left out or approximated.
+
+This is SVG import, not Figma file compatibility. `.fig` files, Figma's REST/plugin data, auto layout, components and variants from Figma are not read; SVG exported from Figma imports as plain shapes like any other SVG.
+
+### Path nodes
+
+Arbitrary outlines use a new `path` node type. `node.path` stores absolute `M/L/C/Q/Z` commands in an authored box (`width`, `height`) plus an optional `fillRule` (`nonzero` / `evenodd`). The node's width/height scale that box, so resizing, rotation, groups, flow layout and snapping treat paths like other boxes. Arcs, shorthand curves and relative commands are converted on import (nine significant digits). Validation accepts only `M/L/C/Q/Z` letters, numbers and whitespace, starting with `M`, up to 2,000,000 characters, with a box of at most 10,000,000 per side. Renderers re-serialize the parsed numbers instead of emitting stored text. SVG and PNG export draw `<path>`, CanvasKit draws the same commands, dashed strokes follow the path, and inside/outside strokes clip to it. HTML/CSS export embeds each path as inline SVG in node units with its solid fills and a centred stroke, so horizontal and vertical lines still draw. Hit testing, marquee and measurement use the path's box, not its outline. Paths cannot be drawn or point-edited in the editor yet; corner radius does not apply.
+
+### Supported SVG subset
+
+- Structure: `svg` (width/height in px, pt, mm, cm, in, em, or from `viewBox`; `viewBox` with `preserveAspectRatio`), `g`, `a`, `use` (local `#id` references, including `symbol` with its viewBox, nested up to 32 levels), `switch` (first child only). Element `transform` lists (`matrix`, `translate`, `scale`, `rotate` with centre, `skewX`, `skewY`) become node transforms; `g` becomes a group.
+- Shapes: `rect` (with `rx`/`ry`), `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`.
+- Paint: fill and stroke as hex, `rgb()`/`rgba()`, `hsl()`/`hsla()`, CSS named colours, `currentColor`, `transparent`; `fill-opacity`, `stroke-opacity`, `opacity`, `fill-rule`, `stroke-width`, `stroke-dasharray` (positive values), `visibility` (imported as hidden layers), `display:none` (left out).
+- Gradients: `linearGradient` and `radialGradient` with `objectBoundingBox` or `userSpaceOnUse`, `gradientTransform`, stops with offset/colour/opacity, and `href` templates. Bounding-box linear gradients are converted so their colour lines match SVG on non-square shapes.
+- Styles: presentation attributes, inline `style`, and `<style>` rules with simple selectors (`tag`, `.class`, `#id` and combinations such as `rect.a`), applied by specificity and order, with inheritance. `!important` is ignored. A `symbol`'s own styles cascade from the `use` that references it.
+- Text: `text` with `tspan` becomes one editable auto-width text node. Font family (first name; `sans-serif` → Noto Sans KR), size, weight, letter spacing and `text-anchor` are kept. Positions accept units (`%`, `em`). A `tspan` that sets `y` or a non-zero `dy` starts a new line, and the first such gap sets the line height; a leading `tspan`'s `x` replaces the text element's. The SVG baseline position places the first line. Fonts that are not available render with the editor's fallback; glyph metrics therefore may differ from the source.
+- Images: embedded `data:` images. PNG is kept as is; other decodable formats (JPEG, WebP, GIF, SVG) are converted to PNG in the browser. `preserveAspectRatio` none and meet alignments are applied; identical images share one asset.
+
+### Left out or approximated (with a warning)
+
+`clip-path`, `mask`, `filter`, `pattern` fills (the fallback colour is used when given), markers, blend modes, `paint-order`, non-scaling strokes, `stroke-linecap`/`stroke-linejoin` (drawn butt/miter), gradient strokes (first stop colour), spread methods other than pad, radial focal points, elliptical bounding-box radial gradients (circle), skewed gradient transforms, unequal `rx`/`ry` (smaller value), zero-length dash entries, per-glyph positions and rotation, `textPath` (plain text), vertical text, `textLength`, text stroke, mixed `tspan` styles (first style), text with a font size of 0 or less (left out), nested `svg` clipping and its own percentage viewport (lengths stay relative to the root viewport), a visible child inside a hidden group (hidden, as the model inherits visibility), `image` `slice` (shown whole), images over 16,384 px per side or 40 megapixels, CSS transforms, `@media`/`@import` and other at-rules, complex CSS selectors, `foreignObject`, animation and unknown elements.
+
+External references are never fetched: images or `use` pointing to files or URLs, and `@import`, are skipped. The file is parsed as an inert XML document; scripts and event handler attributes are never run, and nothing is inserted into the editor page. An element whose converted values the document model rejects (non-finite numbers, paths larger than the model allows) is left out with a warning; the rest of the file still imports. Files over 10 MB (checked before reading), non-SVG documents and imports that would exceed the 100,000-layer limit are rejected without changing the document.

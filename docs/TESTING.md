@@ -277,3 +277,16 @@ EDITOR_URL=http://127.0.0.1:5173/ DRAFTROOM_URL=http://127.0.0.1:4173/ P02_LABEL
 To compare against an earlier commit, serve a production build of that commit on another
 port and run the same command with a different label. Timing depends on machine load;
 compare runs from the same machine and session, and repeat each build at least twice.
+
+## SVG import (I01)
+
+With Vite running, `EDITOR_URL=http://127.0.0.1:5173/ node tests/svg-import.e2e.mjs` checks:
+
+- A supported-subset fixture (gradients including `href` templates, CSS class/id rules, groups with transforms, `use`, even-odd and dashed paths, arcs, lines, polylines, an embedded PNG) imports with the expected node types and no warnings.
+- The browser's raster of the original SVG matches the editor's SVG export of the imported nodes, and a second import → export of that export matches too (mean channel error and pixels off by more than 64 at 240×160). CanvasKit's drawing of the imported document matches the SVG export within the renderer-suite bound.
+- An unsafe fixture (script, `onload`/`onclick`, `@import`, external image and `use`, clip-path, filter, pattern, foreignObject, animation, nested `svg`, mixed `tspan` styles) produces the documented warnings, runs no script and makes no request to the external address.
+- Text keeps anchor, baseline, `tspan` line breaks and weight. A JPEG data image becomes an owned PNG asset, and non-SVG input is rejected.
+- Edge values: a `symbol`'s fill cascades through `use`, `%`/`em` text positions resolve, a leading `tspan` `x` wins, and a zero font size, an oversized path and a non-finite gradient are each skipped with a warning while the rest imports.
+- In the editor, toolbar upload creates one selected frame, Undo/Redo treat the import as one step, autosave reload keeps it, and CanvasKit renders it without a renderer error.
+
+Artifacts go to ignored `test-results/i01-*`. `tests/vector-path.test.ts` covers path parsing, bounds, validation, scaling, SVG/HTML export and SVG value parsing.

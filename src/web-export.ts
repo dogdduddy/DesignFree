@@ -2,7 +2,8 @@ import fontLicense from "../public/fonts/OFL.txt?raw";
 import { validateDocument, type SceneDocument } from "./core";
 import { computeLayout } from "./flex-layout";
 import { webLayout } from "./web-layout";
-import { nodeFills } from "./paints";
+import { dashIntervals, nodeFills, strokePosition } from "./paints";
+import { nodePathData } from "./vector-path";
 import { cssFont, missingFont, textLayout } from "./text-layout";
 import { webStyleVariables, styleVariable } from "./web-style-variables";
 
@@ -140,7 +141,10 @@ function exportFrameSnapshot(
     if (fills.some((p) => p.type !== "solid"))
       warnings.add(`${node.name}: gradient 채우기는 생략됩니다.`);
     const solids = fills.filter((p) => p.type === "solid");
-    if (node.stroke?.width) warnings.add(`${node.name}: stroke는 생략됩니다.`);
+    if (node.stroke?.width && node.type !== "path")
+      warnings.add(`${node.name}: stroke는 생략됩니다.`);
+    if (node.type === "path" && node.stroke?.width && strokePosition(node) !== "center")
+      warnings.add(`${node.name}: 안쪽·바깥쪽 stroke는 가운데 stroke로 내보냅니다.`);
     let content = "";
     if (node.type === "text" && node.text) {
       const t = node.text,
@@ -171,6 +175,22 @@ function exportFrameSnapshot(
       warnings.add(
         "텍스트는 계산된 줄바꿈·줄 위치를 고정합니다. 폭 변경에 따른 재줄바꿈과 DOM 폰트 baseline·glyph raster의 editor pixel 동등성은 지원하지 않습니다.",
       );
+    } else if (node.type === "path") {
+      // Vector outlines keep their geometry as inline SVG in the box.
+      const d = nodePathData(node),
+        rule = node.path?.fillRule === "evenodd" ? "evenodd" : "nonzero",
+        s = node.stroke;
+      // Node units without a viewBox: a zero-height line still draws.
+      content = `<svg aria-hidden="true" width="${Math.max(1, node.width)}" height="${Math.max(1, node.height)}" style="display:block;overflow:visible">${solids
+        .map(
+          (p) =>
+            `<path d="${d}" fill-rule="${rule}" fill="${color(p.color, p.opacity)}"/>`,
+        )
+        .join("")}${
+        s?.width
+          ? `<path d="${d}" fill="none" stroke="${color(s.color, s.opacity)}" stroke-width="${s.width}"${s.dash?.length ? ` stroke-dasharray="${dashIntervals(s.dash).join(" ")}"` : ""}/>`
+          : ""
+      }</svg>`;
     } else if (solids.length) {
       style.push(
         `background-image:${[...solids]
@@ -201,7 +221,9 @@ function exportFrameSnapshot(
       appearance.push(
         `border-radius:var(${styleVariable("style", refs.radius)})`,
       );
-    if (refs?.color && node.type !== "group") {
+    // A path's inline SVG already uses the resolved colour; a background
+    // variable would paint its whole box.
+    if (refs?.color && node.type !== "group" && node.type !== "path") {
       const value = `var(${styleVariable("style", refs.color)})`;
       appearance.push(
         node.type === "text"

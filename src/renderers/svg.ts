@@ -10,6 +10,7 @@ import {
   dashIntervals,
 } from "../paints";
 import { cssFont, textLayout } from "../text-layout";
+import { nodePathData } from "../vector-path";
 import type { SceneDocument, SceneNode, Viewport } from "../core";
 export const FONT_URL = "/fonts/NotoSansKR.ttf";
 export const escapeXml = (v: unknown) =>
@@ -65,6 +66,11 @@ export function sceneMarkup(
     const geometry = (style: string) => {
       if (node.type === "ellipse")
         return `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2}" ry="${h / 2}" ${style}/>`;
+      if (node.type === "path") {
+        // clip-rule applies when the outline clips an inside stroke.
+        const rule = node.path?.fillRule === "evenodd" ? "evenodd" : "nonzero";
+        return `<path d="${nodePathData(node)}" fill-rule="${rule}" clip-rule="${rule}" ${style}/>`;
+      }
       if (node.type === "text" && node.text) {
         const t = node.text;
         return `<text ${style} text-rendering="geometricPrecision" font-kerning="normal" xml:space="preserve" font-family="${escapeXml(cssFont(t.fontFamily))}" font-size="${n(t.fontSize)}" font-weight="${n(t.fontWeight)}" letter-spacing="${n(t.letterSpacing ?? 0)}">${textLayout(

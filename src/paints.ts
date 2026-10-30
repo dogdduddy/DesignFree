@@ -1,4 +1,5 @@
 import type { Paint, SceneNode } from "./core";
+import { nodePathData } from "./vector-path";
 export const nodeFills = (node: SceneNode): Paint[] =>
   node.fills ?? [node.fill];
 export const sortedStops = (
@@ -27,6 +28,7 @@ export const dashIntervals = (dash: number[] = []) =>
 export function strokePathData(node: SceneNode): string {
   const w = node.width,
     h = node.height;
+  if (node.type === "path") return nodePathData(node);
   if (node.type === "ellipse")
     return w === 0 || h === 0
       ? ""

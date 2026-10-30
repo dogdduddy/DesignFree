@@ -39,6 +39,8 @@ import {
   Circle,
   Type,
   ImagePlus,
+  PenTool,
+  Shapes,
   Undo2,
   Redo2,
   Download,
@@ -108,6 +110,7 @@ import {
 } from "./documents";
 import { serverStorage, validateLibrary } from "./server-storage";
 import { useLocalDraft } from "./use-local-draft";
+import { MAX_SVG_BYTES, browserToPng, insertSvg, parseSvg } from "./svg-import";
 import { CLIPBOARD_MIME, copySelection, pasteSelection } from "./clipboard";
 
 import { moveLayers, stepLayers, reparentCanvasDrop } from "./layers";
@@ -186,7 +189,9 @@ const iconFor = (type: string) =>
           ? Circle
           : type === "image"
             ? ImagePlus
-            : Square;
+            : type === "path"
+              ? PenTool
+              : Square;
 
 function RotationDeltaField({
   disabled,
@@ -313,6 +318,7 @@ export default function App() {
   selectedRef.current = selected;
   const stage = useRef<HTMLDivElement>(null),
     fileInput = useRef<HTMLInputElement>(null),
+    svgInput = useRef<HTMLInputElement>(null),
     importInput = useRef<HTMLInputElement>(null),
     textarea = useRef<HTMLTextAreaElement>(null),
     gesture = useRef<any>(null),
@@ -1254,6 +1260,42 @@ export default function App() {
       tell("PNG 이미지를 추가했습니다.");
     } catch {
       tell("이미지를 읽을 수 없습니다. 올바른 PNG 파일인지 확인해 주세요.");
+    }
+  };
+  const uploadSvg = async (file: File) => {
+    if (!readyRef.current) return;
+    const epoch = documentEpoch.current;
+    const center = world({ x: size.width / 2, y: size.height / 2 });
+    if (file.size > MAX_SVG_BYTES) {
+      tell("SVG 가져오기 실패: SVG 파일이 너무 큽니다 (최대 10 MB).");
+      return;
+    }
+    try {
+      const fragment = await parseSvg(await file.text(), {
+        name: file.name.replace(/\.svg$/i, ""),
+        center,
+        toPng: browserToPng,
+      });
+      // Image decoding can finish after a document switch or during a gesture.
+      if (epoch !== documentEpoch.current) return;
+      cancel();
+      execute(insertSvg(docRef.current, fragment, docRef.current.rootId));
+      // execute reports its own error; only a committed import is selected.
+      if (!docRef.current.nodes[fragment.frame.id]) return;
+      selectedRef.current = [fragment.frame.id];
+      setSelected([fragment.frame.id]);
+      const w = fragment.warnings;
+      tell(
+        `SVG를 가져왔습니다 (레이어 ${fragment.nodes.length + 1}개).` +
+          (w.length
+            ? ` 제외·근사: ${w.slice(0, 3).join(" · ")}${w.length > 3 ? ` 외 ${w.length - 3}건` : ""}`
+            : ""),
+      );
+    } catch (e) {
+      tell(
+        "SVG 가져오기 실패: " +
+          (e instanceof Error ? e.message : "읽을 수 없는 파일입니다."),
+      );
     }
   };
   const importDoc = async (file: File) => {
@@ -2506,6 +2548,13 @@ export default function App() {
             >
               <ImagePlus size={19} />
             </button>
+            <button
+              title="SVG 가져오기"
+              aria-label="SVG 가져오기"
+              onClick={() => svgInput.current?.click()}
+            >
+              <Shapes size={19} />
+            </button>
           </div>
           <div className="canvas-bottom">
             <span className="canvas-help">
@@ -2888,7 +2937,10 @@ export default function App() {
                       ? geometry.nodes[n.id].radius
                       : n.radius,
                     (v) => updateOne({ radius: Math.max(0, v) }),
-                    !editable || n.type === "group" || !!n.styleRefs?.radius,
+                    !editable ||
+                      n.type === "group" ||
+                      n.type === "path" ||
+                      !!n.styleRefs?.radius,
                   )}
                   {field(
                     "불투명도",
@@ -3209,6 +3261,16 @@ export default function App() {
         accept="image/png"
         onChange={(e) => {
           if (e.target.files?.[0]) uploadImage(e.target.files[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        hidden
+        type="file"
+        ref={svgInput}
+        accept="image/svg+xml,.svg"
+        onChange={(e) => {
+          if (e.target.files?.[0]) uploadSvg(e.target.files[0]);
           e.target.value = "";
         }}
       />
