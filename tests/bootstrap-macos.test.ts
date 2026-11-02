@@ -112,6 +112,29 @@ describe.skipIf(process.platform === "win32")(
         expect(existsSync(marker)).toBe(false);
         expect(result.stderr).toContain("로컬 Docker 소켓이 아니므로");
       }));
+    it("relaunches Docker Desktop once and explains manual start when it did not open", () => {
+      // Ready on the 9th check (40 s); the app process never appears.
+      const result = bash(
+        'checks=0; launches=0; desktop_ready(){ checks=$((checks+1)); [ "$checks" -ge 9 ]; }; docker_running(){ return 1; }; launch_docker(){ launches=$((launches+1)); }; pause(){ :; }; wait_for_docker /Applications/Docker.app; echo "status=$? launches=$launches"',
+      );
+      expect(result.stdout).toContain("status=0 launches=2");
+      expect(result.stdout).toContain("응용 프로그램 → Docker를 직접 실행하세요");
+      expect(result.stdout).toContain("Docker Desktop이 실행되지 않아 다시 시작합니다");
+    });
+    it("does not relaunch a Docker Desktop that is already starting", () => {
+      const result = bash(
+        'checks=0; launches=0; desktop_ready(){ checks=$((checks+1)); [ "$checks" -ge 20 ]; }; docker_running(){ return 0; }; launch_docker(){ launches=$((launches+1)); }; pause(){ :; }; wait_for_docker /Applications/Docker.app; echo "status=$? launches=$launches"',
+      );
+      expect(result.stdout).toContain("status=0 launches=1");
+      expect(result.stdout).toContain("Docker 준비를 기다리는 중입니다 (60초)");
+    });
+    it("stops after ten minutes with retry guidance", () => {
+      const result = bash(
+        'launches=0; desktop_ready(){ return 1; }; docker_running(){ return 0; }; launch_docker(){ launches=$((launches+1)); }; pause(){ :; }; if wait_for_docker /Applications/Docker.app; then echo status=0; else echo "status=$?"; fi',
+      );
+      expect(result.stdout).toContain("status=1");
+      expect(result.stderr).toContain("같은 명령을 다시 실행하세요");
+    });
     it("refuses other compose working directories without container mutations", () => {
       const result = bash(
         'docker(){ if [ "$1" = ps ]; then printf "fixture-id\\n"; else printf "/different/checkout\\n"; fi; }; check_compose_ownership /expected/checkout',

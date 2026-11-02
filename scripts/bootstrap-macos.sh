@@ -146,19 +146,36 @@ ensure_docker() {
   export PATH="$docker_app/Contents/Resources/bin:$HOME/.docker/bin:$PATH"
   unset DOCKER_HOST DOCKER_TLS_VERIFY DOCKER_CERT_PATH
   export DOCKER_CONTEXT=desktop-linux
+  wait_for_docker "$docker_app" || return 1
+  docker compose version >/dev/null
+}
+
+launch_docker() { open -a "$1" >/dev/null 2>&1 || open "$1" >/dev/null 2>&1 || true; }
+docker_running() { pgrep -f "$1/Contents/MacOS/" >/dev/null 2>&1; }
+pause() { sleep "$1"; }
+
+# Right after installation the first launch can silently not open the app.
+# Retry once, and say plainly how to start it by hand; the wait continues.
+wait_for_docker() {
+  local docker_app="$1" elapsed=0 state
   say 'Docker Desktop을 시작합니다. 최초 약관·권한 화면을 직접 확인하고 시작을 완료하세요.'
-  open -a "$docker_app"
-  local elapsed=0 state
+  say "Docker 창이 열리지 않으면 Finder → 응용 프로그램 → Docker를 직접 실행하세요. 실행되면 설치가 자동으로 이어집니다."
+  launch_docker "$docker_app"
   while :; do
-    if desktop_ready; then break
+    if desktop_ready; then return 0
     else state=$?; if [ "$state" = 2 ]; then return 1; fi; fi
     if [ "$elapsed" -ge 600 ]; then
       fail 'Docker가 아직 준비되지 않았습니다. Docker 화면에서 시작을 완료한 뒤 같은 명령을 다시 실행하세요.'; return 1
     fi
-    sleep 5
+    if [ "$elapsed" = 30 ] && ! docker_running "$docker_app"; then
+      say 'Docker Desktop이 실행되지 않아 다시 시작합니다. 그래도 창이 없으면 응용 프로그램에서 Docker를 직접 실행하세요.'
+      launch_docker "$docker_app"
+    elif [ "$elapsed" -gt 0 ] && [ $((elapsed % 60)) = 0 ]; then
+      say "Docker 준비를 기다리는 중입니다 (${elapsed}초). 약관·권한 화면이 떠 있으면 완료해 주세요."
+    fi
+    pause 5
     elapsed=$((elapsed + 5))
   done
-  docker compose version >/dev/null
 }
 
 check_compose_ownership() {
