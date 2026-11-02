@@ -1,5 +1,6 @@
 import { validateDocument, type SceneDocument } from "./core";
 import { validateStyleLibrary, type StyleLibrary } from "./style-library";
+import { randomId } from "./random-id";
 
 /** References stay document-local; these maps record the external origin of pinned entries. */
 export type SharedStyleLibrary = {
@@ -170,7 +171,7 @@ export function importSharedStyleLibrary(
       if (!Object.hasOwn(link[category], id)) {
         let target: string;
         do {
-          target = `shared-${crypto.randomUUID()}`;
+          target = `shared-${randomId()}`;
         } while (
           Object.hasOwn(next.styleLibrary[category], target) ||
           next.sharedStyleLibraries.some((l) =>

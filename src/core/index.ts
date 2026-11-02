@@ -25,6 +25,7 @@ import {
   type Interaction,
 } from "../prototype";
 import type { Layout } from "../flex-layout";
+import { randomId } from "../random-id";
 export type { Layout } from "../flex-layout";
 /** Serializable authoring model. Layout meaning stays separate from render geometry. */
 export type Matrix = [number, number, number, number, number, number];
@@ -741,7 +742,7 @@ export function createNode(
   properties: Partial<SceneNode> = {},
 ): SceneNode {
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     type,
     name: type,
     parentId,
@@ -807,7 +808,7 @@ export function duplicateNodes(
   const identityMap: Record<string, string> = Object.create(null);
   const copy = (id: string, parentId: string): string => {
     const source = doc.nodes[id];
-    const newId = crypto.randomUUID();
+    const newId = randomId();
     identityMap[id] = newId;
     next.nodes[newId] = { ...clone(source), id: newId, parentId, children: [] };
     next.nodes[newId].children = source.children.map((child) =>

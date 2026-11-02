@@ -1,6 +1,7 @@
 import { snapshotDocument, type SceneDocument } from "./core";
 import { DraftConflictError, type StoredDraft } from "./local-draft-storage";
 import { ServerOutbox } from "./server-outbox";
+import { randomId } from "./random-id";
 
 export type Library = { document: SceneDocument; documents: SceneDocument[] };
 export type SaveRequest = Library & {
@@ -81,7 +82,7 @@ export class ServerDraftStorage {
     return this.mutate(async () => {
       const request = this.pending?.request ?? {
         ...latest,
-        operationId: crypto.randomUUID(),
+        operationId: randomId(),
         expectedVersion: Math.max(revision ?? 0, this.confirmedVersion),
       };
       await this.replace(
@@ -192,7 +193,7 @@ export class ServerDraftStorage {
       ) {
         const request = {
           ...latest,
-          operationId: crypto.randomUUID(),
+          operationId: randomId(),
           expectedVersion: ack.version,
         };
         await this.replace({ request, body: JSON.stringify(request) }, latest);

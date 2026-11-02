@@ -644,3 +644,9 @@ Hit testing uses each layer's box: rounded clip corners, path outlines and empty
 ### Not included
 
 Instance overrides are not pruned: an overridden link to a deleted screen stays in the override (inactive) and keeps hiding the main component's link until the override is reset. Other triggers (hover, drag, key, timers), overlays, scrolling and fixed areas, smart animate, slide/push transitions, cross-page flows, multiple flows, back actions as links, link arrows on the canvas, device frames, presentation sharing and comments.
+
+## Plain-http LAN access
+
+Browsers treat only https and `localhost`/`127.0.0.1` as secure contexts. Opened as `http://<LAN address>:4173/`, the editor is not in one, and `crypto.randomUUID` is unavailable there. All client-side IDs (documents, layers, assets, styles, variants, save operations) therefore come from `randomId()` (`src/random-id.ts`), which uses `crypto.randomUUID` when present and otherwise builds a v4 UUID from `crypto.getRandomValues`, which is available in every context. No other secure-context-only browser API is used.
+
+Plain http on a shared network still sends login passwords and session cookies unencrypted. Use it only on a trusted network, and prefer https before several people sign in.

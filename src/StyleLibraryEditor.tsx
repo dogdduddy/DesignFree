@@ -11,6 +11,7 @@ import {
   type TextStyle,
   type Shadow,
 } from "./style-library";
+import { randomId } from "./random-id";
 
 const labels = {
   color: "색",
@@ -345,7 +346,7 @@ export function StyleLibraryEditor({
                 disabled={Object.keys(library[group]).length >= 512}
                 onClick={() =>
                   update((l) => {
-                    const id = `${group === "tokens" ? "token" : "style"}-${crypto.randomUUID()}`;
+                    const id = `${group === "tokens" ? "token" : "style"}-${randomId()}`;
                     l[group][id] = {
                       kind,
                       name: `새 ${labels[kind]} ${group === "tokens" ? "토큰" : "스타일"}`,
@@ -433,7 +434,7 @@ export function StyleLibraryEditor({
               disabled={Object.keys(library.themes).length >= 16}
               onClick={() =>
                 update((l) => {
-                  l.themes[`theme-${crypto.randomUUID()}`] = {
+                  l.themes[`theme-${randomId()}`] = {
                     name: "새 테마",
                     values: {},
                   };

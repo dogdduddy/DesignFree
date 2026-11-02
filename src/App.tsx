@@ -134,6 +134,7 @@ import {
   frameRotation,
   type Handle,
 } from "./transforms";
+import { randomId } from "./random-id";
 
 type Tool = "select" | "frame" | "rectangle" | "ellipse" | "text";
 type XY = { x: number; y: number };
@@ -152,7 +153,7 @@ const inverse = (m: Matrix): Matrix => {
     (m[1] * m[4] - m[0] * m[5]) / d,
   ];
 };
-const uid = () => crypto.randomUUID();
+const uid = () => randomId();
 const isLocked = isNodeLocked;
 
 const layoutMessage =

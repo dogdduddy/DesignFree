@@ -12,6 +12,7 @@ import {
   compatibleStyleBinding,
   type StyleLibrary,
 } from "./style-library";
+import { randomId } from "./random-id";
 const empty = (): StyleLibrary => ({ tokens: {}, styles: {}, themes: {} });
 export function StyleInspector({
   document: doc,
@@ -130,7 +131,7 @@ export function StyleInspector({
                   run(() => {
                     const resolved = resolveDocumentStyles(doc).nodes[node.id],
                       next = structuredClone(library),
-                      id = `style-${crypto.randomUUID()}`;
+                      id = `style-${randomId()}`;
                     let entry: StyleEntry;
                     if (kind === "color") {
                       const fill = (resolved.fills ?? [resolved.fill]).at(-1);

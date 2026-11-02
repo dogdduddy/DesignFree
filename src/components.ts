@@ -1,5 +1,6 @@
 import type { SceneDocument, SceneNode } from "./core";
 import { ownedJSON } from "./owned-json";
+import { randomId } from "./random-id";
 
 /** Expanded scene snapshots keep renderers/layout independent of component semantics. */
 export type Variant = {
@@ -316,7 +317,7 @@ export function reconcileComponents(
             ? id
             : own(link.nodeMap, sid)
               ? link.nodeMap[sid]
-              : crypto.randomUUID();
+              : randomId();
       const keep = new Set(Object.values(nextMap));
       nodeCount +=
         [...keep].filter((nodeId) => !own(doc.nodes, nodeId)).length -
@@ -363,7 +364,7 @@ export function reconcileComponents(
           ids.map((sid) => [
             sid,
             link.variant!.keys[sid] ??
-              `${doc.nodes[sid].type}:${crypto.randomUUID()}`,
+              `${doc.nodes[sid].type}:${randomId()}`,
           ]),
         );
       }
@@ -405,7 +406,7 @@ export function createInstance(
   )
     error("유효한 상위 레이어가 필요합니다.");
   const next = clone(doc),
-    id = crypto.randomUUID();
+    id = randomId();
   const root = clone(source);
   root.id = id;
   root.parentId = parentId;
@@ -588,7 +589,7 @@ export function switchVariant(
         ? id
         : priorSid && doc.nodes[priorSid].type === doc.nodes[sid].type
           ? link.nodeMap[priorSid]
-          : crypto.randomUUID();
+          : randomId();
     if (entry) overrides[sid] = clone(entry.paths);
     if (
       entry?.stroke &&

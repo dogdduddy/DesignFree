@@ -16,6 +16,7 @@ import {
   type SceneDocument,
 } from "./core";
 import { exportSvg } from "./renderers/svg";
+import { randomId } from "./random-id";
 
 export const CLIPBOARD_MIME = "application/x-draftroom+json";
 type Placement = { parentId: string; local: Matrix; sourceLocal?: Matrix };
@@ -35,7 +36,7 @@ export function copySelection(doc: SceneDocument, ids: string[]) {
   const root = createNode("page", null, { fill: { type: "none" } });
   const fragment: SceneDocument = {
     schemaVersion: 1,
-    id: crypto.randomUUID(),
+    id: randomId(),
     name: "Clipboard",
     rootId: root.id,
     nodes: { [root.id]: root },
@@ -189,7 +190,7 @@ export function pasteSelection(
       : undefined;
     const newId =
       existing && JSON.stringify(existing) !== JSON.stringify(asset)
-        ? crypto.randomUUID()
+        ? randomId()
         : id;
     assets[id] = newId;
     next.assets[newId] = { ...asset, id: newId };

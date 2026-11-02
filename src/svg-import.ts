@@ -18,6 +18,7 @@ import {
   transformSegments,
   type Segment,
 } from "./vector-path";
+import { randomId } from "./random-id";
 
 /** SVG file → editable nodes. Supported: svg/g/a/use/symbol, rect, circle,
  * ellipse, line, polyline, polygon, path, text/tspan, embedded raster images,
@@ -867,7 +868,7 @@ async function imageNode(el: Element, style: Style, parentId: string, transform:
   }
   let assetId = ctx.assetByUrl.get(png.dataUrl);
   if (!assetId) {
-    assetId = crypto.randomUUID();
+    assetId = randomId();
     ctx.assets[assetId] = { id: assetId, mimeType: "image/png", dataUrl: png.dataUrl, width: png.width, height: png.height };
     ctx.assetByUrl.set(png.dataUrl, assetId);
   }

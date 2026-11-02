@@ -4,6 +4,7 @@ import {
   serializeDocument,
   type SceneDocument,
 } from "./core";
+import { randomId } from "./random-id";
 
 export const pageIds = (document: SceneDocument) =>
   document.pageIds ?? [document.rootId];
@@ -21,7 +22,7 @@ export function newDocument(): SceneDocument {
   });
   return {
     schemaVersion: 2,
-    id: crypto.randomUUID(),
+    id: randomId(),
     name: "Untitled",
     rootId: page.id,
     pageIds: [page.id],
@@ -83,7 +84,7 @@ export function duplicateDocument(document: SceneDocument): SceneDocument {
   // Layer/page/asset IDs are document-scoped and can be retained safely.
   return {
     ...copy,
-    id: crypto.randomUUID(),
+    id: randomId(),
     name: `${copy.name.slice(0, 195)} copy`,
   };
 }

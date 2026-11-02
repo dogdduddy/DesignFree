@@ -10,6 +10,7 @@ import {
   type Variant,
   variantMembers,
 } from "./components";
+import { randomId } from "./random-id";
 
 /** Clone an explicit semantic correspondence; no heuristic name matching. */
 export function createVariant(doc: SceneDocument, sourceId: string) {
@@ -24,12 +25,12 @@ export function createVariant(doc: SceneDocument, sourceId: string) {
   if (!main.variant) {
     const keys: Record<string, string> = Object.create(null);
     const visit = (id: string) => {
-      keys[id] = `${next.nodes[id].type}:${crypto.randomUUID()}`;
+      keys[id] = `${next.nodes[id].type}:${randomId()}`;
       next.nodes[id].children.forEach(visit);
     };
     visit(sourceId);
     main.variant = {
-      setId: crypto.randomUUID(),
+      setId: randomId(),
       properties: { State: "Default" },
       keys,
     };
@@ -37,7 +38,7 @@ export function createVariant(doc: SceneDocument, sourceId: string) {
   // Refresh only authored semantic keys. Materializing existing instances here
   // would make source propagation look like direct overrides at history capture.
   const refreshKeys = (id: string) => {
-    main.variant!.keys[id] ??= `${next.nodes[id].type}:${crypto.randomUUID()}`;
+    main.variant!.keys[id] ??= `${next.nodes[id].type}:${randomId()}`;
     next.nodes[id].children.forEach(refreshKeys);
   };
   refreshKeys(sourceId);
