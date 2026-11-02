@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { bundleFileName, claudeCodeCommand, claudeDesktopBundle, codexCommand, colleagueMessage } from "./mcp-connect";
 
 type TokenInfo = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
 
@@ -8,7 +9,7 @@ type TokenInfo = { id: string; name: string; createdAt: string; lastUsedAt: stri
 export function AiAccessDialog({ onClose }: { onClose: () => void }) {
   const [tokens, setTokens] = useState<TokenInfo[] | null>(null);
   const [name, setName] = useState("");
-  const [created, setCreated] = useState<{ name: string; token: string } | null>(null);
+  const [created, setCreated] = useState<{ id: string; name: string; token: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const endpoint = `${location.origin}/api/mcp`;
@@ -43,9 +44,10 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
       for (const type of ["copy", "cut", "paste"]) window.removeEventListener(type, clip, true);
     };
   }, []);
-  const [copied, setCopied] = useState(false);
+  // Key of the last copy and whether it worked.
+  const [copied, setCopied] = useState<{ key: string; ok: boolean } | null>(null);
   // navigator.clipboard needs a secure context, which a plain-http LAN address is not.
-  const copyToken = (value: string) => {
+  const copyText = (key: string, value: string, button: HTMLElement) => {
     const field = document.createElement("textarea");
     field.value = value;
     field.setAttribute("readonly", "");
@@ -55,7 +57,18 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
     field.select();
     const ok = document.execCommand("copy");
     field.remove();
-    setCopied(ok);
+    button.focus();
+    setCopied({ key, ok });
+  };
+  const download = (fileName: string, bytes: Uint8Array) => {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/octet-stream" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +81,8 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
-      setCreated({ name: token.name, token: token.token });
+      setCreated({ id: token.id, name: token.name, token: token.token });
+      setCopied(null);
       setName("");
       await load();
     } catch (err) {
@@ -81,38 +95,12 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
     if (!window.confirm(`"${t.name}" 토큰을 폐기할까요? 이 토큰을 쓰는 AI 도구는 더 이상 접근할 수 없습니다.`)) return;
     try {
       await call(`/api/tokens/${encodeURIComponent(t.id)}`, { method: "DELETE" });
+      if (created?.id === t.id) setCreated(null);
       await load();
     } catch (err) {
       setError(`폐기하지 못했습니다: ${(err as Error).message}`);
     }
   };
-  const token = created?.token ?? "<토큰>";
-  const snippets = [
-    {
-      title: "Claude Code",
-      code: `# 셸 기록에 토큰이 남지 않도록 환경 변수로 넘깁니다.\nexport DESIGNFREE_TOKEN="${token}"\nclaude mcp add --transport http designfree ${endpoint} --header "Authorization: Bearer $DESIGNFREE_TOKEN"`,
-    },
-    {
-      title: "Codex (~/.codex/config.toml)",
-      code: `[mcp_servers.designfree]\nurl = "${endpoint}"\nbearer_token_env_var = "DESIGNFREE_TOKEN"\n\n# 셸 설정(~/.zshrc)에 추가:\n# export DESIGNFREE_TOKEN="${token}"\n# 데스크톱 앱이 셸 변수를 못 읽으면 대신:\n# http_headers = { "Authorization" = "Bearer ${token}" }`,
-    },
-    {
-      title: "Claude Desktop (claude_desktop_config.json)",
-      code: JSON.stringify(
-        {
-          mcpServers: {
-            designfree: {
-              command: "npx",
-              args: ["-y", "mcp-remote", endpoint, ...(plainHttp ? ["--allow-http"] : []), "--header", "Authorization:${DESIGNFREE_AUTH}"],
-              env: { DESIGNFREE_AUTH: `Bearer ${token}` },
-            },
-          },
-        },
-        null,
-        2,
-      ),
-    },
-  ];
   return (
     <div className="ai-access-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ai-access" role="dialog" aria-modal="true" aria-label="AI 도구 연결">
@@ -147,26 +135,47 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
           </button>
         </form>
         {error && <p role="alert" className="ai-access-warning">{error}</p>}
-        {created && (
+        {created ? (
           <div className="ai-access-created" data-testid="ai-token-created">
             <p>
-              <b>{created.name}</b> 토큰입니다. 지금 복사해 두세요. 이 창을 닫으면 다시 볼 수 없습니다.
+              <b>{created.name}</b> 토큰입니다. 아래 방법은 이 창을 닫으면 다시 볼 수 없으니 지금 쓰거나 전달하세요.
             </p>
             <code data-testid="ai-token-value">{created.token}</code>
-            <button type="button" onClick={() => copyToken(created.token)}>
-              토큰 복사
-            </button>
-            {copied && <small> 복사했습니다.</small>}
+            <CopyButton id="token" label="토큰 복사" copied={copied} onCopy={(b) => copyText("token", created.token, b)} />
+            <div className="ai-access-tool">
+              <strong>Claude Code</strong>
+              <span>터미널에 붙여 넣고 Enter. 모든 폴더에서 쓸 수 있고, 다시 실행하면 새 토큰으로 바뀝니다.</span>
+              <details>
+                <summary>명령 보기</summary>
+                <pre data-testid="ai-command-claude-code">{claudeCodeCommand(endpoint, created.token)}</pre>
+              </details>
+              <CopyButton id="claude" label="Claude Code 명령 복사" copied={copied} onCopy={(b) => copyText("claude", claudeCodeCommand(endpoint, created.token), b)} />
+            </div>
+            <div className="ai-access-tool">
+              <strong>Codex</strong>
+              <span>터미널에 붙여 넣고 Enter. ~/.codex/config.toml에 추가합니다(처음 실행 전 파일은 config.toml.bak으로 보관).</span>
+              <details>
+                <summary>명령 보기</summary>
+                <pre data-testid="ai-command-codex">{codexCommand(endpoint, created.token)}</pre>
+              </details>
+              <CopyButton id="codex" label="Codex 명령 복사" copied={copied} onCopy={(b) => copyText("codex", codexCommand(endpoint, created.token), b)} />
+            </div>
+            <div className="ai-access-tool">
+              <strong>Claude Desktop</strong>
+              <span>내려받은 파일을 더블클릭하고 [설치]를 누릅니다. 터미널이 필요 없습니다.</span>
+              <button type="button" onClick={() => download(bundleFileName(created.name), claudeDesktopBundle(endpoint, created.token))}>
+                설치 파일 내려받기 ({bundleFileName(created.name)})
+              </button>
+            </div>
+            <div className="ai-access-tool">
+              <strong>동료에게 보내기</strong>
+              <span>세 가지 방법을 담은 안내문입니다. 메신저에 붙여 넣고, Claude Desktop을 쓰면 설치 파일도 함께 보내세요. 메모 앱 등을 거치면 따옴표가 바뀌어 명령이 깨질 수 있으니 메신저에서 바로 복사하게 하세요.</span>
+              <CopyButton id="message" label="안내 메시지 복사" copied={copied} onCopy={(b) => copyText("message", colleagueMessage(endpoint, created.token, created.name), b)} />
+            </div>
           </div>
+        ) : (
+          <p>토큰을 만들면 Claude Code·Codex용 한 줄 명령과 Claude Desktop 설치 파일이 나옵니다. 동료에게 줄 토큰은 동료 이름으로 만들어 전달하세요.</p>
         )}
-        <div className="ai-access-snippets">
-          {snippets.map((s) => (
-            <details key={s.title} open={!!created}>
-              <summary>{s.title}</summary>
-              <pre>{s.code}</pre>
-            </details>
-          ))}
-        </div>
         <div className="ai-access-list">
           <strong>사용 중인 토큰</strong>
           {tokens === null ? (
@@ -190,5 +199,16 @@ export function AiAccessDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function CopyButton({ id, label, copied, onCopy }: { id: string; label: string; copied: { key: string; ok: boolean } | null; onCopy: (button: HTMLElement) => void }) {
+  return (
+    <span className="ai-access-copy">
+      <button type="button" onClick={(e) => onCopy(e.currentTarget)}>
+        {label}
+      </button>
+      <small aria-live="polite">{copied?.key === id && (copied.ok ? "복사했습니다." : "복사하지 못했습니다. 위 내용을 직접 선택해 복사하세요.")}</small>
+    </span>
   );
 }

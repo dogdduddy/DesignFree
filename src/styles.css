@@ -1813,8 +1813,40 @@ svg {
   padding: 8px 10px;
   background: #faf7fe;
 }
-.ai-access-snippets details {
-  margin: 6px 0;
+.ai-access-tool {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #ebe4f4;
+}
+.ai-access-tool span {
+  color: #6f6880;
+}
+.ai-access-tool pre {
+  margin: 4px 0 2px;
+}
+.ai-access-created button,
+.ai-access-tool > button {
+  justify-self: start;
+  border: 1px solid #c9b8ea;
+  border-radius: 5px;
+  background: #fff;
+  padding: 4px 8px;
+}
+.ai-access-tool summary {
+  justify-self: start;
+  color: #6f6880;
+  cursor: pointer;
+}
+.ai-access-list {
+  margin-top: 14px;
+}
+.ai-access-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 0;
 }
 .ai-access-list ul {
   list-style: none;

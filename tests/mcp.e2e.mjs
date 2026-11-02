@@ -2,12 +2,18 @@ import { browserLaunchOptions, artifactPath, serverTestUrl } from "./browser-hel
 import { authenticatedTestSession } from "./auth-helpers.mjs";
 import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Read-only MCP against a disposable server: create a token in the editor,
 // call every tool over HTTP, check images come from the asset volume, then
-// revoke. MCP_SDK_DIR (optional) also runs the official MCP SDK client.
+// revoke. The Claude Desktop bundle downloaded from the dialog is unpacked
+// and its bridge driven over stdio the way Claude Desktop runs it.
+// MCP_SDK_DIR (optional) also runs the official MCP SDK client.
 const url = serverTestUrl();
 const auth = await authenticatedTestSession(url);
 const endpoint = new URL("/api/mcp", url).href;
@@ -53,6 +59,19 @@ const tool = async (token, name, args = {}) => {
   return name === "export_svg" ? text : JSON.parse(text);
 };
 
+// Runs an unpacked .mcpb the way its manifest says and returns the replies.
+const runBundle = (dir, messages) => new Promise((resolve, reject) => {
+  const manifest = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8"));
+  const { command, args, env } = manifest.server.mcp_config;
+  assert.equal(command, "node");
+  const child = spawn(process.execPath, args.map((a) => a.replace("${__dirname}", dir)), { env });
+  let out = "";
+  child.stdout.on("data", (d) => (out += d));
+  child.on("error", reject);
+  child.on("close", () => resolve(out.split("\n").filter(Boolean).map((l) => JSON.parse(l))));
+  child.stdin.end(messages.map((m) => JSON.stringify(m)).join("\n") + "\n");
+});
+
 const browser = await chromium.launch(browserLaunchOptions());
 try {
   const page = await browser.newPage({ storageState: auth.storageState, viewport: { width: 1440, height: 1000 } });
@@ -84,6 +103,46 @@ try {
   assert.ok((await dialog.locator("pre").first().textContent()).includes(token), "snippet carries the new token");
   assert.ok((await dialog.locator("pre").first().textContent()).includes(endpoint));
   check("token created in the editor; snippets carry endpoint and token; cookie alone is rejected");
+
+  // One-step setup: pasteable commands, a colleague message and the Claude Desktop bundle.
+  assert.equal(
+    (await page.getByTestId("ai-command-claude-code").textContent()).trim(),
+    `claude mcp remove designfree -s local >/dev/null 2>&1; claude mcp remove designfree -s user >/dev/null 2>&1; claude mcp add --scope user --transport http designfree ${endpoint} --header "Authorization: Bearer ${token}"`,
+  );
+  const codex = await page.getByTestId("ai-command-codex").textContent();
+  assert.ok(codex.includes("[mcp_servers.designfree]") && codex.includes(`'${endpoint}' '${token}'`));
+  await dialog.screenshot({ path: artifactPath("mcp-dialog.png") });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(url).origin });
+  await dialog.getByRole("button", { name: "안내 메시지 복사" }).click();
+  await dialog.getByText("복사했습니다.").waitFor();
+  const message = await page.evaluate(() => navigator.clipboard.readText());
+  assert.ok(message.includes(token) && message.includes("designfree-E2E-Claude-Code.mcpb"), "colleague message carries token and bundle name");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /설치 파일 내려받기/ }).click(),
+  ]);
+  assert.equal(download.suggestedFilename(), "designfree-E2E-Claude-Code.mcpb");
+  const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "designfree-mcpb-"));
+  try {
+    const bundle = path.join(bundleDir, "bundle.mcpb");
+    await download.saveAs(bundle);
+    execFileSync("unzip", ["-q", bundle, "-d", path.join(bundleDir, "ext")]);
+    const ext = path.join(bundleDir, "ext");
+    const replies = await runBundle(ext, [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "bundle", version: "1" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "search_layers", arguments: { query: "Submit" } } },
+    ]);
+    assert.deepEqual(replies.map((r) => r.id), [1, 2, 3]);
+    assert.equal(replies[0].result.protocolVersion, "2025-06-18");
+    assert.equal(replies[1].result.tools.length, 9);
+    assert.ok(replies[2].result.content[0].text.includes("Submit button"));
+    report.bundle = { file: download.suggestedFilename(), bytes: (await fs.stat(bundle)).size };
+    check("dialog gives one-line Claude Code/Codex commands, a colleague message and a Claude Desktop bundle whose bridge reads the server");
+  } finally {
+    await fs.rm(bundleDir, { recursive: true, force: true });
+  }
 
   // Protocol.
   const init = await rpc(token, { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "1" } } });
