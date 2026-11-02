@@ -114,6 +114,7 @@ import { useLocalDraft } from "./use-local-draft";
 import { MAX_SVG_BYTES, browserToPng, insertSvg, parseSvg } from "./svg-import";
 import { createPortal } from "react-dom";
 import { PrototypePreview } from "./PrototypePreview";
+import { AiAccessDialog } from "./AiAccessDialog";
 import {
   DISSOLVE_DURATIONS,
   screenOf,
@@ -272,7 +273,8 @@ export default function App() {
     [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]),
     [marquee, setMarquee] = useState<MarqueeBox | null>(null),
     [collapsed, setCollapsed] = useState<Set<string>>(new Set()),
-    [previewing, setPreviewing] = useState<string | null>(null);
+    [previewing, setPreviewing] = useState<string | null>(null),
+    [aiAccess, setAiAccess] = useState(false);
   const geometry = useMemo(() => computeLayout(doc), [doc]);
   const geometryRef = useRef(geometry);
   geometryRef.current = geometry;
@@ -1699,7 +1701,7 @@ export default function App() {
   const textNode = editing ? geometry.nodes[editing] : null;
   const textMatrix = textNode ? getWorldTransform(geometry, textNode.id) : null;
   return (
-    <div className="editor-app" inert={!!previewing}>
+    <div className="editor-app" inert={!!previewing || aiAccess}>
       <header className="topbar" inert={!readyRef.current || !!webPreview}>
         <div className="brand-mark">
           <span />
@@ -1847,6 +1849,11 @@ export default function App() {
             }[saveStatus]
           }
         </span>
+        {ownerSession && (
+          <button className="header-button" onClick={() => setAiAccess(true)}>
+            AI 연결
+          </button>
+        )}
         {ownerSession && (
           <button
             className="header-button"
@@ -3392,6 +3399,7 @@ export default function App() {
           e.target.value = "";
         }}
       />
+      {aiAccess && createPortal(<AiAccessDialog onClose={() => setAiAccess(false)} />, document.body)}
       {/* Outside the inert editor so only the player takes input. */}
       {previewing &&
         doc.nodes[previewing] &&

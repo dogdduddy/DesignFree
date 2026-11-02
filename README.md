@@ -70,4 +70,6 @@ Open this repository folder in your installed Codex app/CLI and sign in separate
 - [Privacy boundary](docs/PRIVACY.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+AI tools (Claude Code, Claude Desktop, Codex) can read a server-mode library through read-only MCP; see [docs/MCP.md](docs/MCP.md).
+
 This is a prototype: live collaboration, general Figma import, advanced prototyping, physical IME and cross-platform verification need further work. Read feature limitations before assuming Figma equivalence.

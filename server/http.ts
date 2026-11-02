@@ -3,6 +3,8 @@ import { OwnerAuth, assertSameOrigin, sessionCookie } from "./auth";
 import { createServer, type IncomingMessage } from "node:http";
 import type { Pool } from "pg";
 import { loadLibrary, saveLibrary, StorageError } from "./store";
+import { createToken, listTokens, revokeToken, verifyBearer } from "./tokens";
+import { handleRpc, type McpLibrary } from "./mcp";
 
 const MAX_BODY = 32 * 1024 * 1024;
 async function readJSON(request: IncomingMessage, limit = MAX_BODY) {
@@ -66,11 +68,64 @@ export function createApi(pool: Pool, assets?: AssetVolume) {
         send(200, { initialized: true, authenticated: false });
         return;
       }
+      if (request.url?.split("?")[0].replace(/\/+$/, "") === "/api/mcp") {
+        // AI tools authenticate with a personal token, never the browser session.
+        if (!(await verifyBearer(pool, request.headers.authorization))) {
+          response.setHeader("WWW-Authenticate", 'Bearer realm="designfree"');
+          throw new StorageError(401, "token_required");
+        }
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          throw new StorageError(405, "method_not_allowed");
+        }
+        const body = await readJSON(request, 1024 * 1024);
+        // Batches (dropped from MCP 2025-06-18) are kept small for older clients.
+        if (Array.isArray(body) && (!body.length || body.length > 10)) {
+          send(200, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request: batch must hold 1-10 messages" } });
+          return;
+        }
+        // One library read per HTTP request; PNG bytes only for exported layers.
+        let library: Promise<McpLibrary | null> | undefined;
+        const ctx = {
+          load: () => (library ??= loadLibrary(pool) as Promise<McpLibrary | null>),
+          readImage: assets ? (documentId: string, key: string) => assets.read(documentId, key) : undefined,
+        };
+        const replies: unknown[] = [];
+        for (const m of Array.isArray(body) ? body : [body]) {
+          const reply = await handleRpc(m, ctx);
+          if (reply !== undefined) replies.push(reply);
+        }
+        if (!replies.length) {
+          response.writeHead(202);
+          response.end();
+        } else send(200, Array.isArray(body) ? replies : replies[0]);
+        return;
+      }
       if (request.url !== "/api/health" && !(await auth.authenticated(request)))
         throw new StorageError(401, "authentication_required");
       if (request.url === "/api/health" && request.method === "GET") {
         await pool.query("SELECT 1");
         send(200, { ok: true });
+      } else if (request.url === "/api/tokens" && request.method === "GET") {
+        send(200, { tokens: await listTokens(pool) });
+      } else if (request.url === "/api/tokens" && request.method === "POST") {
+        if (request.headers["sec-fetch-site"] === "cross-site")
+          throw new StorageError(403, "cross_site_write");
+        send(201, await createToken(pool, await readJSON(request, 4096)));
+      } else if (
+        request.url?.startsWith("/api/tokens/") &&
+        request.method === "DELETE"
+      ) {
+        if (request.headers["sec-fetch-site"] === "cross-site")
+          throw new StorageError(403, "cross_site_write");
+        let id: string;
+        try {
+          id = decodeURIComponent(request.url.slice("/api/tokens/".length));
+        } catch {
+          throw new StorageError(404, "token_not_found");
+        }
+        await revokeToken(pool, id);
+        send(200, { revoked: true });
       } else if (
         request.url === "/api/library/current" &&
         request.method === "GET"

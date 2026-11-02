@@ -182,6 +182,8 @@ try {
   }
   assert.equal(await title.textContent(), "Home", "editor shortcuts did nothing");
   // Rendering: screen background and the button fill at known points.
+  // The hotspot hint from the earlier miss clears on its own; sample pixels after it.
+  await page.waitForFunction(() => !document.querySelector('[data-testid="prototype-hotspot"]'));
   const shot = await page.getByTestId("prototype-screen").screenshot();
   const colours = await page.evaluate(async ({ png, points, w, h }) => {
     const img = new Image();

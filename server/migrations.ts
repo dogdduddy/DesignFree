@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import { STORAGE_SCHEMA } from "./store";
 import { AUTH_SCHEMA } from "./auth";
+import { TOKEN_SCHEMA } from "./tokens";
 
 export const migrations = [
   { version: 1, name: "library-and-operation-ledger", sql: STORAGE_SCHEMA },
@@ -11,6 +12,7 @@ export const migrations = [
     name: "session-expiry-index",
     sql: "CREATE INDEX draftroom_sessions_expiry ON draftroom_sessions(expires_at)",
   },
+  { version: 4, name: "api-tokens", sql: TOKEN_SCHEMA },
 ];
 export type Migration = (typeof migrations)[number];
 export const migrationHash = (step: Migration) =>
